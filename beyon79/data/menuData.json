@@ -1,0 +1,243 @@
+{
+  "Rolls": [
+    {
+      "name": "Chicken Wrap",
+      "price": 120,
+      "inStock": true,
+      "isChicken": true,
+      "originalPrice": 130
+    },
+    {
+      "name": "Cheesy Chicken Wrap",
+      "price": 140,
+      "inStock": true,
+      "image": "/images/menu/cheesy-chicken-wrap.jpg",
+      "isChicken": true
+    },
+    {
+      "name": "Veg Wrap",
+      "price": 80,
+      "inStock": true,
+      "image": "/images/menu/veg-wrap.jpg"
+    },
+    {
+      "name": "Paneer Wrap",
+      "price": 110,
+      "inStock": true,
+      "image": "/images/menu/paneer-wrap.jpg"
+    },
+    {
+      "name": "Shawarma",
+      "price": 90,
+      "inStock": false
+    }
+  ],
+  "Sandwich": [
+    {
+      "name": "Veg Sandwich",
+      "price": 60,
+      "inStock": true,
+      "image": "/images/menu/veg-sandwich.jpg",
+      "originalPrice": 70
+    },
+    {
+      "name": "Paneer Sandwich",
+      "price": 80,
+      "inStock": true,
+      "image": "/images/menu/paneer-sandwich.jpg",
+      "originalPrice": 90
+    },
+    {
+      "name": "Crispy Chicken Sandwich",
+      "price": 70,
+      "inStock": true,
+      "image": "/images/menu/crispy-chicken-sandwich.jpg",
+      "isChicken": true,
+      "originalPrice": 80
+    },
+    {
+      "name": "Cheesy Crispy Chicken Sandwich",
+      "price": 80,
+      "inStock": true,
+      "image": "/images/menu/cheesy-crispy-chicken-sandwich.png",
+      "isChicken": true,
+      "originalPrice": 90
+    }
+  ],
+  "Burger": [
+    {
+      "name": "Veg Burger",
+      "price": 50,
+      "inStock": true,
+      "image": null,
+      "originalPrice": 70
+    },
+    {
+      "name": "Paneer Burger",
+      "price": 90,
+      "inStock": true,
+      "image": null
+    },
+    {
+      "name": "Crispy Chicken Burger",
+      "price": 110,
+      "inStock": true,
+      "isChicken": true,
+      "image": null
+    },
+    {
+      "name": "Cheesy Crispy Chicken Burger",
+      "price": 130,
+      "inStock": true,
+      "isChicken": true,
+      "image": null
+    },
+    {
+      "name": "Double Crispy Chicken Burger",
+      "price": 160,
+      "inStock": true,
+      "isChicken": true,
+      "image": null
+    }
+  ],
+  "Fries": [
+    {
+      "name": "Normal (Reg)",
+      "price": 60,
+      "inStock": true
+    },
+    {
+      "name": "Normal (Large)",
+      "price": 85,
+      "inStock": true
+    },
+    {
+      "name": "Peri Peri (Reg)",
+      "price": 75,
+      "inStock": true
+    },
+    {
+      "name": "Peri Peri (Large)",
+      "price": 95,
+      "inStock": true
+    },
+    {
+      "name": "Cheesy Peri Peri (Large)",
+      "price": 110,
+      "inStock": true
+    },
+    {
+      "name": "Paneer Fries Loaded (Large)",
+      "price": 130,
+      "inStock": true
+    },
+    {
+      "name": "Chicken Fries Loaded (Large)",
+      "price": 149,
+      "inStock": true,
+      "isChicken": true
+    }
+  ],
+  "Fried Chicken": [
+    {
+      "name": "Chicken Strips (3 pcs)",
+      "price": 109,
+      "inStock": true,
+      "isChicken": true
+    },
+    {
+      "name": "Chicken Strips (6 pcs)",
+      "price": 199,
+      "inStock": true,
+      "isChicken": true
+    },
+    {
+      "name": "Chicken Popcorn (Reg)",
+      "price": 115,
+      "inStock": true,
+      "isChicken": true
+    },
+    {
+      "name": "Chicken Popcorn (Large)",
+      "price": 159,
+      "inStock": true,
+      "isChicken": true
+    },
+    {
+      "name": "Peri Peri Chicken Popcorn (Large)",
+      "price": 185,
+      "inStock": true,
+      "isChicken": true
+    }
+  ],
+  "Chicken Bucket": [
+    {
+      "name": "Chicken Bucket (4 pcs)",
+      "price": 210,
+      "inStock": true,
+      "isChicken": true
+    },
+    {
+      "name": "Chicken Bucket (6 pcs)",
+      "price": 310,
+      "inStock": true,
+      "isChicken": true
+    },
+    {
+      "name": "Chicken Bucket (9 pcs)",
+      "price": 460,
+      "inStock": true,
+      "isChicken": true
+    },
+    {
+      "name": "Honey Dip Bucket (4 pcs)",
+      "price": 259,
+      "inStock": false
+    },
+    {
+      "name": "Honey Dip Bucket (6 pcs)",
+      "price": 359,
+      "inStock": false
+    },
+    {
+      "name": "Honey Dip Bucket (9 pcs)",
+      "price": 509,
+      "inStock": false
+    }
+  ],
+  "Combo Meal": [
+    {
+      "name": "Crispy Burger + Coke + Fries",
+      "price": 160,
+      "inStock": false
+    },
+    {
+      "name": "Double Crispy Chicken Burger + Coke + Fries",
+      "price": 209,
+      "inStock": true,
+      "isChicken": true
+    }
+  ],
+  "Bucket Combo Meal": [
+    {
+      "name": "3 pcs Chicken + 3 pcs Strips + Fries + Coke",
+      "price": 309,
+      "inStock": true,
+      "isChicken": true
+    },
+    {
+      "name": "3 pcs Chicken + 3 pcs Strips + Small Popcorn + Coke",
+      "price": 343,
+      "inStock": true,
+      "isChicken": true
+    }
+  ],
+  "Tapas": [],
+  "Milk Shake": [
+    {
+      "name": "Orea Milk Shake",
+      "price": 90,
+      "inStock": true
+    }
+  ]
+}

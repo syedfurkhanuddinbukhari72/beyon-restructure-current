@@ -1,0 +1,553 @@
+.no-entry-cursor {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="%23d32f2f" stroke="%23fff" stroke-width="2"/><rect x="5" y="9" width="10" height="2" rx="1" fill="%23fff" transform="rotate(-45 10 10)"/></svg>') 10 10, not-allowed;
+}
+/* Side tooltip for WhatsApp button */
+/* Top right tooltip for WhatsApp button */
+.side-tooltip {
+  position: absolute;
+  background: #222;
+  color: #fff;
+  padding: 0.7em 1.5em;
+  border-radius: 1em;
+  font-size: 1.1rem;
+  white-space: nowrap;
+  z-index: 9999;
+  opacity: 0;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+  transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.side-tooltip.show {
+  opacity: 1;
+}
+/* Tooltip for WhatsApp button */
+.whatsapp-tooltip {
+  opacity: 0;
+  transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #222;
+  color: #fff;
+  padding: 0.4em 1em;
+  border-radius: 1em;
+  font-size: 1rem;
+  white-space: nowrap;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.whatsapp-tooltip.show {
+  opacity: 1;
+}
+/* Custom cursor for no-entry effect on WhatsApp button */
+.no-entry-cursor {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="%23d32f2f" stroke="%23fff" stroke-width="2"/><rect x="5" y="9" width="10" height="2" rx="1" fill="%23fff" transform="rotate(-45 10 10)"/></svg>') 10 10, not-allowed;
+}
+/* Custom no-entry hover effect for WhatsApp button */
+.simple-block{
+  position: relative;
+  width: 200px; height: 120px;
+}
+.simple-block::before{
+  content: "";
+  position: absolute;
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  border: 6px solid #fff;
+  background: #d32f2f;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%) scale(0.6);
+  opacity: 0;
+  transition: transform 160ms, opacity 160ms;
+  box-shadow: 0 6px 10px rgba(0,0,0,0.35);
+}
+.simple-block::after{
+  content: "";
+  position: absolute;
+  width: 6px; height: 80px;
+  background: #fff;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%) rotate(-45deg) scaleY(0.8);
+  opacity: 0;
+  transition: opacity 160ms, transform 160ms;
+}
+.simple-block:hover::before,
+.simple-block:hover::after{
+  opacity: 1;
+  transform: translate(-50%,-50%) scale(1);
+}
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  /* Neon search theme variables */
+  --nx-bg: #0b0b0b;
+  --nx-border: #111111;
+  --nx-text: #f5f5f5;
+  --nx-placeholder: #9ca3af;
+  --nx-accent-left: #ea580c;   /* deeper orange (600) for a richer glow */
+  --nx-accent-right: #7c4dff;  /* violet/indigo glow (disabled by default) */
+  /* Search bar specific palette (easy to tweak) */
+  --search-bg: #ffffff;        /* pure white as requested */
+  --search-border: #e5e5e5;    /* light grey border for definition */
+  --search-icon-bg: #f1f1f1;   /* soft grey icon capsule on white */
+}
+
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+html, body, #__next {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Hide scrollbar for horizontal scroll */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari, Opera */
+}
+
+/* Horizontal swipe/scroll helpers */
+.horizontal-scroll {
+  display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch; /* iOS momentum */
+  gap: 0.5rem;
+  scroll-snap-type: x proximity; /* gentle snap */
+  flex-wrap: nowrap; /* ensure chips never wrap to next line */
+}
+/* Frame around the chip row to ensure rounded shadow edges */
+.chip-frame {
+  padding: 6px 8px; /* smaller */
+  border-radius: 9999px;
+  -webkit-clip-path: inset(0 round 9999px);
+          clip-path: inset(0 round 9999px);
+  overflow: hidden; /* clip any inner glow at corners */
+}
+.horizontal-scroll > * {
+  scroll-snap-align: start;
+}
+
+/* Edge fade to hint there is more content */
+.fade-edges {
+  position: relative;
+}
+.fade-edges::before,
+.fade-edges::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 32px;
+  pointer-events: none;
+  z-index: 1;
+}
+.fade-edges::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--background) 0%, rgba(255,255,255,0) 100%);
+}
+.fade-edges::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--background) 0%, rgba(255,255,255,0) 100%);
+}
+
+/* ===== Fancy search (theme: orange/dark) ===== */
+/* ===== Neon search (magenta/indigo glow, dark pill) ===== */
+.neon-search { position: relative; z-index: 0; overflow: visible; margin: 0 0.8vw; }
+.neon-input {
+  width: 100%; height: 48px; border-radius: 16px;
+  background: var(--search-bg);
+  color: var(--nx-text);
+  border: 1px solid var(--search-border);
+  padding-left: 54px; padding-right: 12px; /* right icon removed */
+  position: relative; z-index: 1;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.03) inset; /* keep subtle inner definition */
+  /* use drop-shadow for rounded, non-rectangular outer glow */
+  filter: drop-shadow(0 10px 18px rgba(0,0,0,0.16)) drop-shadow(0 2px 6px rgba(0,0,0,0.12));
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.neon-input:focus,
+.neon-input:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.03) inset; /* no extra browser ring */
+  border-color: var(--search-border) !important;
+}
+
+/* Enforce theme with higher specificity to avoid overrides */
+.neon-search .neon-input { background-color: var(--search-bg) !important; border-color: var(--search-border) !important; color: #111 !important; }
+.neon-input::placeholder { color: var(--nx-placeholder); }
+.nx-icon-left, .nx-icon-right {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 36px; height: 36px; border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--search-icon-bg); color: #e5e7eb; /* dark grey to match bar */
+  border: 1px solid rgba(255,255,255,0.12);
+  z-index: 2; overflow: visible;
+}
+.neon-search .nx-icon-left { background-color: var(--search-icon-bg) !important; color: #6b7280 !important; }
+.nx-icon-left { left: 8px; }
+.nx-icon-right { display: none; }
+.nx-icon-left::after, .nx-icon-right::after {
+  content: ""; position: absolute; inset: -6px; border-radius: 12px;
+  filter: blur(22px); z-index: 1; pointer-events: none;
+}
+.nx-icon-left::after { background: radial-gradient(50% 60% at 50% 50%, var(--nx-accent-left), transparent 70%); }
+.nx-icon-right::after { background: radial-gradient(50% 60% at 50% 50%, var(--nx-accent-right), transparent 70%); opacity: 0; }
+
+/* Add a tighter core glow for stronger visibility */
+.nx-icon-left::before {
+  content: ""; position: absolute; inset: -2px; border-radius: 12px;
+  /* Base core + a sweeping band layered on top */
+  background:
+    radial-gradient(45% 50% at 50% 50%, var(--nx-accent-left), transparent 80%),
+    linear-gradient(110deg, transparent 0%, transparent 25%, rgba(234, 88, 12, 0.9) 40%, transparent 60%, transparent 80%);
+  background-repeat: no-repeat, no-repeat;
+  background-size: 100% 100%, 320% 100%;
+  background-position: 50% 50%, -160% 0; /* start the sweep off-screen to the left */
+  filter: blur(8px); z-index: 1; pointer-events: none;
+}
+
+/* Subtle constant glow (idle) for visibility */
+.neon-search .nx-icon-left::after { opacity: .5; }
+/* Emphasize left icon with a soft outer shadow */
+.nx-icon-left { box-shadow: 0 0 0 1px rgba(249,115,22,0.12), 0 0 18px rgba(249,115,22,0.22); }
+.neon-search::before, .neon-search::after {
+  content: ""; position: absolute; top: -10px; bottom: -10px; width: 42%; z-index: -1; filter: blur(18px);
+}
+/* Whole-bar subtle orange glow: on focus, a soft wave-like gradient across the bar */
+.neon-search::before,
+.neon-search::after {
+  content: "";
+  position: absolute;
+  inset: -8px -10px; /* extend slightly for a nicer bloom */
+  border-radius: 24px;
+  z-index: -1;
+  opacity: 0;
+  filter: blur(26px);
+  pointer-events: none;
+  /* ensure the glow follows the rounded corners to avoid rectangular feel */
+  -webkit-clip-path: inset(0 round 24px);
+          clip-path: inset(0 round 24px);
+}
+.neon-search::before { background: linear-gradient(15deg, rgba(234,88,12,.75), rgba(249,115,22,.35), rgba(234,88,12,.75)); }
+.neon-search::after  { background: linear-gradient(195deg, rgba(234,88,12,.6), rgba(249,115,22,.28), rgba(234,88,12,.6)); }
+.neon-search:focus-within::before,
+.neon-search:focus-within::after { opacity: .35; filter: blur(28px); animation: barSweep 1200ms ease-in-out infinite alternate; }
+
+@keyframes barSweep {
+  0%   { transform: translateX(-2%) scale(1); }
+  100% { transform: translateX(2%)  scale(1.02); }
+}
+
+@supports (color: color-mix(in oklab, white, black)) {
+  .neon-search::before { background: radial-gradient(60% 60% at 0% 50%, color-mix(in oklab, var(--nx-accent-left) 55%, transparent), transparent 70%); }
+  .neon-search::after  { background: radial-gradient(60% 60% at 100% 50%, color-mix(in oklab, var(--nx-accent-right) 55%, transparent), transparent 70%); }
+}
+
+/* Switch from pulse to a wavy sweep on focus for performance and clarity */
+.neon-search:focus-within .nx-icon-left::before { animation: neonSweepLeft 2400ms linear infinite; }
+.neon-search.typing .nx-icon-left::after,
+.neon-search.typing .nx-icon-left::before { animation: none; }
+.neon-search.typing .nx-icon-right::after { animation: none; opacity: 0; }
+/* Slight container support glow while interacting (left side only) */
+.neon-search:focus-within::before { opacity: .28; }
+
+@keyframes neonSweepLeft {
+  0%   { background-position: 50% 50%, -160% 0; }
+  100% { background-position: 50% 50%, 160% 0; }
+}
+/* Right pulse unused (kept for reference) */
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .neon-search.animated .nx-icon-left::after,
+  .neon-search.animated .nx-icon-right::after {
+    animation: none !important;
+  }
+  .neon-search.typing .nx-icon-left::after,
+  .neon-search.typing .nx-icon-right::after,
+  .neon-search.typing::before { animation: none !important; opacity: .3; }
+}
+
+/* ===== Category chip sweep animation (triggered on click) ===== */
+.chip {
+  position: relative;
+  overflow: visible;
+  will-change: filter;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  contain: layout paint;
+  isolation: isolate;
+}
+
+/* Gradient base removed (rolled back); keeping sweep and active glow */
+.chip::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  /* Centered radial glow */
+  background: radial-gradient(120% 120% at 50% 50%, rgba(234, 88, 12, 0.62), transparent 60%);
+  filter: blur(20px);
+  opacity: 0;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  transition: opacity 140ms ease-out;
+  will-change: transform, opacity;
+  transform: translateZ(0) scale(0.96);
+}
+.chip::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  pointer-events: none;
+  /* Multi-stop gradient, inspired by the sample */
+  background: linear-gradient(
+      15deg,
+      #880088,
+      #aa2068,
+      #cc3f47,
+      #de6f3d,
+      #f09f33,
+      #de6f3d,
+      #cc3f47,
+      #aa2068,
+      #880088
+    ) no-repeat;
+  background-size: 360% 100%;
+  background-position: left center;
+  filter: blur(8px);
+  opacity: 0; /* animated in */
+  mix-blend-mode: screen; /* make the glow more intense */
+  transform: translateZ(0);
+  will-change: background-position, opacity;
+}
+.chip--sweep::after { animation: chipSweep 480ms cubic-bezier(.16,.84,.44,1) 1; }
+.chip--sweep { box-shadow: 0 0 0 1px rgba(255,255,255,0.12), 0 0 24px rgba(240,159,51,0.45), 0 0 48px rgba(240,159,51,0.25); }
+.chip--sweep::before { opacity: .5; animation: chipBaseWaver 480ms ease-out 1; }
+
+/* Persisting light shadow when chip is selected */
+.chip--active {
+  /* Keep intensity but ensure curved glow by using drop-shadow */
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.14);
+  filter: drop-shadow(0 6px 12px rgba(240,159,51,0.35)) drop-shadow(0 0 18px rgba(240,159,51,0.38));
+}
+.chip--active::before {
+  /* Keep center glow strong and steady */
+  opacity: .58;
+  transform: translateZ(0) scale(1.02);
+}
+@keyframes chipSweep {
+  0%   { background-position: left center;  opacity: .5; }
+  35%  { opacity: 1; }
+  65%  { opacity: .9; }
+  100% { background-position: right center; opacity: .45; }
+}
+
+/* Subtle centered waver for the base radial glow */
+@keyframes chipBaseWaver {
+  0%   { transform: translateZ(0) scale(0.96); opacity: .42; }
+  40%  { transform: translateZ(0) scale(1.08); opacity: .58; }
+  70%  { transform: translateZ(0) scale(1.02); opacity: .54; }
+  100% { transform: translateZ(0) scale(1.00); opacity: .5; }
+}
+
+/* Sheet height utility: 65% of viewport; uses dvh when supported for mobile toolbars */
+.sheet-65vh {
+  height: 65vh;
+}
+@supports (height: 1dvh) {
+  .sheet-65vh {
+    height: 65dvh;
+  }
+}
+
+/* Alternative: 60% sheet height (mobile-correct) */
+.sheet-60vh { height: 60vh; }
+@supports (height: 1dvh) { .sheet-60vh { height: 60dvh; } }
+
+/* Alternative: 50% sheet height (mobile-correct) */
+.sheet-50vh { height: 50vh; }
+@supports (height: 1dvh) { .sheet-50vh { height: 50dvh; } }
+
+/* Alternative: 40% sheet height (mobile-correct) */
+.sheet-40vh { height: 40vh; }
+@supports (height: 1dvh) { .sheet-40vh { height: 40dvh; } }
+
+/* Alternative: 45% sheet height (mobile-correct) */
+.sheet-45vh { height: 45vh; }
+@supports (height: 1dvh) { .sheet-45vh { height: 45dvh; } }
+
+/* Alternative: 30% sheet height (mobile-correct) */
+.sheet-30vh { height: 30vh; }
+@supports (height: 1dvh) { .sheet-30vh { height: 30dvh; } }
+
+/* Brand utility classes (use the canonical accent from :root) */
+.bg-brand { background-color: var(--nx-accent-left) !important; }
+.bg-brand-dark { background-color: #f97316 !important; } /* slightly brighter for hover */
+.hover-bg-brand:hover { background-color: #f97316 !important; }
+.text-brand { color: var(--nx-accent-left) !important; }
+.btn-brand { background-color: var(--nx-accent-left); color: #fff; }
+.btn-brand:hover { background-color: #f97316; }
+
+
+/* Alternative: ~18% sheet height (very low card) */
+.sheet-18vh { height: 18vh; }
+@supports (height: 1dvh) { .sheet-18vh { height: 18dvh; } }
+
+/* (intentionally left blank; quick-actions-menu utility removed to avoid empty ruleset) */
+
+/* Slim orange scrollbar used in Quick actions and other scroll areas */
+.scrollbar-orange {
+  scrollbar-width: thin;                                /* Firefox */
+  scrollbar-color: #f97316 rgba(249,115,22,0.15);       /* thumb, track */
+}
+.scrollbar-orange::-webkit-scrollbar {
+  width: 2px; height: 2px;                              /* Chrome/Safari/Edge */
+}
+.scrollbar-orange::-webkit-scrollbar-track {
+  background: rgba(249,115,22,0.12);
+}
+.scrollbar-orange::-webkit-scrollbar-thumb {
+  background: #f97316; border-radius: 9999px;
+}
+.scrollbar-orange::-webkit-scrollbar-thumb:hover {
+  background: #ea580c;                                   /* darker on hover */
+}
+
+/* === Animated Add (+) to Check (32x32), glowy pulse, dark orange circle === */
+.add-icon { cursor: pointer; width: 32px; height: 32px; padding: 0; border: none; background: transparent; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; }
+.add-icon svg { width: 100%; height: 100%; display: block; }
+.add-icon__circle { fill: #ea580c; opacity: 1; transition: opacity .2s ease; shape-rendering: auto; }
+.add-icon__plus { stroke: #ffffff; stroke-width: 3.58; stroke-linecap: round; fill: none; opacity: 1; transform: scale(0.81) rotate(0deg); transform-origin: 50% 50%; transform-box: fill-box; transition: all .4s ease; animation: addPulse 2s infinite ease-in-out; filter: drop-shadow(0 0 0px rgba(255,255,255,0.85)); vector-effect: non-scaling-stroke; }
+.add-icon__check { stroke: #ffffff; stroke-width: 3.58; stroke-linecap: round; fill: none; opacity: 0; transform: scale(0) rotate(-45deg); transform-origin: 50% 50%; transform-box: fill-box; transition: all .4s ease; filter: drop-shadow(0 0 0px rgba(255,255,255,0.7)); vector-effect: non-scaling-stroke; }
+.add-icon.active .add-icon__plus { opacity: 0; transform: scale(0) rotate(45deg); animation: none; }
+.add-icon.active .add-icon__check { opacity: 1; transform: scale(0.81) rotate(0deg); filter: drop-shadow(0 0 3px rgba(255,255,255,0.6)); }
+.add-icon:not(.active) .add-icon__check { transition: all .05s ease-out; opacity: 0; transform: scale(0) rotate(-45deg); filter: drop-shadow(0 0 0px rgba(255,255,255,0.6)); }
+.add-icon:not(.active) .add-icon__plus { transition: all 1.2s ease; opacity: 1; transform: scale(1) rotate(0deg); animation: addPulse 2s infinite ease-in-out; filter: drop-shadow(0 0 0px rgba(255,255,255,0.8)); }
+.add-icon:hover .add-icon__circle { opacity: .9; }
+.add-icon:hover .add-icon__plus { stroke: #f5f5f5; filter: drop-shadow(0 0 2px rgba(255,255,255,0.95)); }
+.add-icon.active:hover .add-icon__check { stroke: #f5f5f5; filter: drop-shadow(0 0 4px rgba(255,255,255,0.8)); }
+@keyframes addPulse { 0%,100%{ transform: scale(1); opacity:1; filter: drop-shadow(0 0 0px rgba(255,255,255,0.8)); } 50%{ transform: scale(1.15); opacity:.9; filter: drop-shadow(0 0 6px rgba(255,255,255,0.8)); } }
+
+/* Disabled visual state */
+.add-icon.add-icon--disabled { opacity: .5; cursor: not-allowed; }
+
+/* Compact variant to match amount text size more closely */
+.add-icon--xs { width: 24px; height: 24px; }
+.add-icon--xs .add-icon__plus, .add-icon--xs .add-icon__check { stroke-width: 3.07; }
+.add-icon--xs .add-icon__plus { transform: scale(0.74); animation-duration: 1.8s; }
+/* Ensure the check matches the XS size on active */
+.add-icon.add-icon--xs.active .add-icon__check { transform: scale(0.74) rotate(0deg); }
+
+/* ===== lds-ring loader (orange via currentColor) ===== */
+.lds-ring,
+.lds-ring div { box-sizing: border-box; }
+.lds-ring { display: inline-block; position: relative; width: 80px; height: 80px; }
+.lds-ring div {
+  box-sizing: border-box; display: block; position: absolute;
+  width: 64px; height: 64px; margin: 8px; border: 8px solid currentColor;
+  border-radius: 50%; animation: lds-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  border-color: currentColor transparent transparent transparent;
+}
+.lds-ring div:nth-child(1) { animation-delay: -0.45s; }
+.lds-ring div:nth-child(2) { animation-delay: -0.3s; }
+.lds-ring div:nth-child(3) { animation-delay: -0.15s; }
+@keyframes lds-ring { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* Small variant */
+.lds-ring--sm { width: 36px; height: 36px; }
+.lds-ring--sm div { width: 28px; height: 28px; margin: 4px; border-width: 4px; }
+
+/* ===== lds-ripple loader (orange via currentColor) ===== */
+.lds-ripple, .lds-ripple div { box-sizing: border-box; }
+.lds-ripple { display: inline-block; position: relative; width: 80px; height: 80px; }
+.lds-ripple div {
+  position: absolute; border: 4px solid currentColor; opacity: 1; border-radius: 50%;
+  animation: lds-ripple 1s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+.lds-ripple div:nth-child(2) { animation-delay: -0.5s; }
+@keyframes lds-ripple {
+  0% { top: 36px; left: 36px; width: 8px; height: 8px; opacity: 0; }
+  4.9% { top: 36px; left: 36px; width: 8px; height: 8px; opacity: 0; }
+  5% { top: 36px; left: 36px; width: 8px; height: 8px; opacity: 1; }
+  100% { top: 0; left: 0; width: 80px; height: 80px; opacity: 0; }
+}
+/* Small variant to match lds-ring--sm (36px box) */
+.lds-ripple--sm { width: 36px; height: 36px; }
+.lds-ripple--sm div { border-width: 3px; }
+@keyframes lds-ripple-sm {
+  /* Account for 3px border so the visual circle remains centered inside 36x36 */
+  0%   { top: 15px; left: 15px; width: 6px;  height: 6px;  opacity: 0; }
+  4.9% { top: 15px; left: 15px; width: 6px;  height: 6px;  opacity: 0; }
+  5%   { top: 15px; left: 15px; width: 6px;  height: 6px;  opacity: 1; }
+  100% { top: 3px;  left: 3px;  width: 30px; height: 30px; opacity: 0; }
+}
+/* Apply the small keyframes when using the small variant */
+.lds-ripple--sm div { animation-name: lds-ripple-sm; }
+
+/* Tab Loader for switching tabs - orange pill-shaped background with spinning arc */
+.tab-loader {
+  position: fixed; /* Or absolute, depending on your layout */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: none; /* Hidden by default */
+  z-index: 1000; /* Ensure it overlays tabs */
+  width: 40px; /* Match image size; adjust as needed */
+  height: 40px;
+}
+
+.loader-background {
+  width: 100%;
+  height: 100%;
+  background-color: #FFF3E0; /* Light orange background (like light green in image) */
+  border-radius: 20px; /* Pill shape */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #FFE0B2; /* Subtle orange border for definition */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Soft shadow for depth */
+}
+
+.loader-arc {
+  width: 24px; /* Smaller circle inside the pill */
+  height: 24px;
+  border: 3px solid transparent; /* Invisible borders for arc effect */
+  border-top-color: #FF9800; /* Orange arc color */
+  border-radius: 50%;
+  animation: spin 1s linear infinite; /* Continuous rotation */
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Hamburger menu repositioning for landscape mode */
+@media (orientation: landscape) {
+  .hamburger-menu {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    z-index: 1000;
+    transform: translateY(-50%) translateX(-50%);
+  }
+}

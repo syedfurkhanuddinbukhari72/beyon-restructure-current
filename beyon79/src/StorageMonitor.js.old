@@ -1,0 +1,88 @@
+class StorageMonitor {
+  constructor() {
+    this.isOnline = true;
+    this.storageQuota = null;
+    this.storageUsed = null;
+    this.listeners = new Set();
+
+    this.init();
+  }
+
+  init() {
+    // Check online status
+    if (typeof window !== 'undefined') {
+      this.isOnline = navigator.onLine;
+      window.addEventListener('online', () => {
+        this.isOnline = true;
+        this.notifyListeners('online');
+      });
+      window.addEventListener('offline', () => {
+        this.isOnline = false;
+        this.notifyListeners('offline');
+      });
+
+      // Monitor storage quota
+      this.updateStorageInfo();
+      // Update storage info every 30 seconds
+      setInterval(() => this.updateStorageInfo(), 30000);
+    }
+  }
+
+  async updateStorageInfo() {
+    if (typeof navigator !== 'undefined' && 'storage' in navigator && 'estimate' in navigator.storage) {
+      try {
+        const estimate = await navigator.storage.estimate();
+        this.storageQuota = estimate.quota;
+        this.storageUsed = estimate.usage;
+        this.notifyListeners('storageUpdate', { quota: this.storageQuota, used: this.storageUsed });
+      } catch (error) {
+        console.warn('Failed to get storage estimate:', error);
+      }
+    }
+  }
+
+  addListener(callback) {
+    this.listeners.add(callback);
+  }
+
+  removeListener(callback) {
+    this.listeners.delete(callback);
+  }
+
+  notifyListeners(event, data) {
+    this.listeners.forEach(callback => {
+      try {
+        callback(event, data);
+      } catch (error) {
+        console.error('Error in storage monitor listener:', error);
+      }
+    });
+  }
+
+  getStorageUsagePercent() {
+    if (this.storageQuota && this.storageUsed) {
+      return (this.storageUsed / this.storageQuota) * 100;
+    }
+    return null;
+  }
+
+  isStorageNearLimit(thresholdPercent = 90) {
+    const percent = this.getStorageUsagePercent();
+    return percent !== null && percent >= thresholdPercent;
+  }
+
+  getStatus() {
+    return {
+      isOnline: this.isOnline,
+      storageQuota: this.storageQuota,
+      storageUsed: this.storageUsed,
+      storageUsagePercent: this.getStorageUsagePercent(),
+      isStorageNearLimit: this.isStorageNearLimit()
+    };
+  }
+}
+
+// Singleton instance
+const storageMonitor = new StorageMonitor();
+
+export default storageMonitor;

@@ -1,0 +1,46 @@
+{
+  "name": "beyon-admin-desktop",
+  "version": "1.0.0",
+  "description": "Beyon Admin Desktop Application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "ELECTRON_DEV=true electron .",
+    "build": "cd ../beyon79 && npm run web:build",
+    "pack": "electron-builder",
+    "dist": "npm run build && npm run pack"
+  },
+  "keywords": ["restaurant", "admin", "offline", "desktop"],
+  "author": "Beyon",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^25.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.beyon.admindesktop",
+    "productName": "Beyon Admin Desktop",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../beyon79/out",
+        "to": "beyon79/out",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

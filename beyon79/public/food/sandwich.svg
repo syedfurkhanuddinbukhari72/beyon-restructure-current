@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f3f4f6"/>
+      <stop offset="100%" stop-color="#e5e7eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="400" fill="url(#bg)"/>
+  <!-- Sandwich layers -->
+  <g transform="translate(320,200)">
+    <rect x="-220" y="-60" width="440" height="24" rx="12" fill="#fbbf24"/>
+    <rect x="-220" y="-36" width="440" height="20" rx="10" fill="#16a34a"/>
+    <rect x="-220" y="-16" width="440" height="20" rx="10" fill="#ef4444"/>
+    <rect x="-220" y="4" width="440" height="24" rx="12" fill="#fbbf24"/>
+  </g>
+  <text x="50%" y="92%" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="28" fill="#6b7280">Sandwich</text>
+</svg>

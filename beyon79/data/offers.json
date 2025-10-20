@@ -1,0 +1,23 @@
+[
+  {
+    "id": "1760606112483",
+    "active": true,
+    "type": "buy_x_get_y",
+    "base": {
+      "match": {
+        "name": "Cheesy Chicken Wrap"
+      },
+      "quantity": 2
+    },
+    "reward": {
+      "items": [
+        {
+          "name": "Chicken Popcorn (Large)",
+          "price": 250,
+          "quantity": 1
+        }
+      ]
+    },
+    "limitPerOrder": 1
+  }
+]

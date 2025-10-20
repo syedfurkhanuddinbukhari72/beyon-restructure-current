@@ -1,0 +1,2 @@
+- [x] Make the sweep brighter by increasing opacity in the linear-gradient for .nx-icon-left::before in globals.css
+- [ ] Test the effect by launching browser and focusing the search input

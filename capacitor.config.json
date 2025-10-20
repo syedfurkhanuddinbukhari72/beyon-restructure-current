@@ -1,0 +1,8 @@
+{
+  "appId": "com.beyon.adminoffline",
+  "appName": "Admin Offline",
+  "webDir": "beyon79/out",
+  "server": {
+    "androidScheme": "https"
+  }
+}

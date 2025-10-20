@@ -1,0 +1,52 @@
+{
+  "name": "beyon-admin-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "electron/main.js",
+  "homepage": "./",
+  "scripts": {
+  "dev": "npm run electron:dev",
+  "cap:copy": "npx cap copy android",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android",
+    "web:build": "cd beyon79 && npm run build",
+    "preelectron:dev": "node scripts/ensure-dev-port.js",
+  "electron:dev": "cross-env ELECTRON_DEV=true concurrently -k \"cd beyon79 && npm run dev\" \"wait-on http://localhost:3000/admin-unified && electron .\"",
+    "electron:pack": "npm run web:build && electron .",
+    "electron:build": "npm run web:build && electron-builder",
+    "dist": "npm run web:build && electron-builder --publish=never"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0",
+    "concurrently": "^9.0.0",
+    "kill-port": "^2.0.1",
+    "wait-on": "^8.0.0",
+    "cross-env": "^7.0.3"
+  },
+  "build": {
+    "appId": "com.beyon.admindesktop",
+    "productName": "Beyon Admin Desktop",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "beyon79/out/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "electron/assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

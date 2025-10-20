@@ -1,0 +1,6 @@
+# Global ignores for Beyon Admin Desktop
+node_modules/
+dist/
+
+# Ignore duplicate lockfile in subproject to avoid warnings
+beyon79/package-lock.json

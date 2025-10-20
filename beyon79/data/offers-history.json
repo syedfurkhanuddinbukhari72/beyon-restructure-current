@@ -1,0 +1,345 @@
+[
+  {
+    "id": "1760370218780-xeitb3",
+    "action": "rule_deactivate",
+    "payload": {
+      "id": "1760365723693",
+      "type": "buy_x_get_y"
+    },
+    "ts": 1760370218780
+  },
+  {
+    "id": "1760371458953-fcr2qx",
+    "action": "rule_deactivate",
+    "payload": {
+      "id": "1760365723693",
+      "type": "buy_x_get_y"
+    },
+    "ts": 1760371458953
+  },
+  {
+    "id": "1760471759943-gh0sfx",
+    "ts": 1760471759943,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "category",
+      "category": "Rolls",
+      "type": "flat",
+      "amount": 10
+    }
+  },
+  {
+    "id": "1760479424786-a7kfby",
+    "ts": 1760479424787,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Shawarma",
+      "type": "flat",
+      "amount": 10
+    }
+  },
+  {
+    "id": "1760480956363-ohwpsp",
+    "ts": 1760480956363,
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    }
+  },
+  {
+    "id": "1760480956968-q2cvgc",
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    },
+    "ts": 1760480956968
+  },
+  {
+    "id": "1760481272847-jx41d5",
+    "ts": 1760481272847,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Cheesy Chicken Wrap",
+      "type": "flat",
+      "amount": 5
+    }
+  },
+  {
+    "id": "1760481348209-gtwom0",
+    "action": "rule_deactivate",
+    "payload": {
+      "id": "1760481020201",
+      "type": "buy_x_get_y"
+    },
+    "ts": 1760481348209
+  },
+  {
+    "id": "1760557459607-lyyrfa",
+    "ts": 1760557459607,
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    }
+  },
+  {
+    "id": "1760560575950-vh9c4j",
+    "ts": 1760560575950,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Chicken Popcorn (Reg)",
+      "type": "flat",
+      "amount": 10
+    }
+  },
+  {
+    "id": "1760560686555-m1ecom",
+    "ts": 1760560686555,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Chicken Popcorn (Large)",
+      "type": "flat",
+      "amount": 10
+    }
+  },
+  {
+    "id": "1760560711852-6ghh2t",
+    "action": "rule_deactivate",
+    "payload": {
+      "id": "1760481020201",
+      "type": "buy_x_get_y"
+    },
+    "ts": 1760560711852
+  },
+  {
+    "id": "1760560714675-mpclu7",
+    "ts": 1760560714675,
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    }
+  },
+  {
+    "id": "1760560715093-qbrlkk",
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    },
+    "ts": 1760560715093
+  },
+  {
+    "id": "1760560734362-ap23co",
+    "ts": 1760560734362,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Cheesy Chicken Wrap",
+      "type": "flat",
+      "amount": 10
+    }
+  },
+  {
+    "id": "1760560783400-iwijcv",
+    "ts": 1760560783400,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Chicken Wrap",
+      "type": "flat",
+      "amount": 10
+    }
+  },
+  {
+    "id": "1760560864482-azyi6e",
+    "ts": 1760560864482,
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    }
+  },
+  {
+    "id": "1760560864933-9gdle7",
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    },
+    "ts": 1760560864933
+  },
+  {
+    "id": "1760563687563-biq2hv",
+    "ts": 1760563687563,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Crispy Chicken Sandwich",
+      "type": "flat",
+      "amount": 10
+    }
+  },
+  {
+    "id": "1760563807722-rvjxtb",
+    "ts": 1760563807722,
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    }
+  },
+  {
+    "id": "1760563808104-oss6cd",
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    },
+    "ts": 1760563808104
+  },
+  {
+    "id": "1760564157621-1i1emm",
+    "ts": 1760564157621,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Crispy Chicken Sandwich",
+      "type": "flat",
+      "amount": 10
+    }
+  },
+  {
+    "id": "1760564918996-kt4211",
+    "ts": 1760564918996,
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    }
+  },
+  {
+    "id": "1760564919299-9xz3et",
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    },
+    "ts": 1760564919299
+  },
+  {
+    "id": "1760565611841-3z9l6e",
+    "action": "rule_deactivate",
+    "payload": {
+      "id": "1760560928267",
+      "type": "buy_x_get_y"
+    },
+    "ts": 1760565611841
+  },
+  {
+    "id": "1760565668864-r9ommh",
+    "ts": 1760565668864,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Chicken Wrap",
+      "type": "flat",
+      "amount": 10
+    }
+  },
+  {
+    "id": "1760565851735-0grbwg",
+    "ts": 1760565851735,
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    }
+  },
+  {
+    "id": "1760565852120-p7bvlf",
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    },
+    "ts": 1760565852120
+  },
+  {
+    "id": "1760565984120-srftpd",
+    "ts": 1760565984120,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Chicken Strips (6 pcs)",
+      "type": "flat",
+      "amount": 10
+    }
+  },
+  {
+    "id": "1760606028832-k8z57m",
+    "ts": 1760606028832,
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    }
+  },
+  {
+    "id": "1760606029288-dna7kh",
+    "action": "discount_revert",
+    "payload": {
+      "scope": "all",
+      "category": null
+    },
+    "ts": 1760606029288
+  },
+  {
+    "id": "1760606034560-y5dn5t",
+    "action": "rule_deactivate",
+    "payload": {
+      "id": "1760565765699",
+      "type": "buy_x_get_y"
+    },
+    "ts": 1760606034560
+  },
+  {
+    "id": "1760611979388-kgkryl",
+    "ts": 1760611979388,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Veg Burger",
+      "type": "flat",
+      "amount": 20
+    }
+  },
+  {
+    "id": "1760645252143-i5kdmh",
+    "ts": 1760645252144,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "item",
+      "item": "Chicken Wrap",
+      "type": "flat",
+      "amount": 10
+    }
+  },
+  {
+    "id": "1760720723034-nlaym4",
+    "ts": 1760720723034,
+    "action": "discount_apply",
+    "payload": {
+      "scope": "category",
+      "category": "Sandwich",
+      "type": "flat",
+      "amount": 10
+    }
+  }
+]
