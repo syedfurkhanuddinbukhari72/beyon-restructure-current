@@ -19,17 +19,20 @@ const api = {
   platform: process.platform,
 };
 
+// Attach printReceipt to api so it's available as electronAPI.printReceipt
+api.printReceipt = (order, options = {}) => ipcRenderer.invoke('print-receipt', { order, options });
+
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electronAPI', api);
-    contextBridge.exposeInMainWorld('process', { env: { NODE_ENV: envName } });
-    contextBridge.exposeInMainWorld('global', {});
+  contextBridge.exposeInMainWorld('electronAPI', api);
+  contextBridge.exposeInMainWorld('process', { env: { NODE_ENV: envName } });
+  contextBridge.exposeInMainWorld('global', {});
   } catch (err) {
     console.error('Failed to expose electronAPI with contextBridge', err);
   }
 } else {
   if (typeof window !== 'undefined') {
-    window.electronAPI = api;
+  window.electronAPI = api;
     applyPolyfills(window);
   }
   applyPolyfills(globalThis);

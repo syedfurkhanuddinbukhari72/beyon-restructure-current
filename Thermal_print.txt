@@ -1,0 +1,328 @@
+Thermal printer integration - plugin guide and required code changes
+
+Purpose
+-------
+This file collects all recommended Node/Electron packages (Windows-compatible) and exact steps/code snippets you'll need to support thermal printing via:
+- ESC/POS over TCP (network)
+- ESC/POS over USB
+- ESC/POS over Serial (COM)
+- Bluetooth SPP (serial over Bluetooth)
+- Windows spooler (driver-based printing / BrowserWindow.print fallback)
+
+Keep this as a single reference while you decide the printer connectivity. Start testing with TCP (no native modules) and add USB/Serial/Bluetooth if needed.
+
+-----------------------------
+1) Recommended packages (Windows-compatible)
+-----------------------------
+Note: some libraries use native bindings and require electron-rebuild and package unpacking at build time.
+
+A. Core & helpers (no native bindings)
+- net (built-in Node module) — for raw TCP sockets (port 9100) to network printers
+- pdf-to-printer — easy wrapper to print PDF files using Windows printers (optional)
+
+B. ESC/POS / thermal-specific libraries
+- node-thermal-printer (https://www.npmjs.com/package/node-thermal-printer)
+  - Supports network, USB, and serial; widely used; has convenient helper functions for text, images, cutter, and drawer kick.
+- escpos (https://www.npmjs.com/package/escpos)
+  - Supports USB/serial/network via adapters; often used with escpos-usb, escpos-serial, etc.
+
+C. Native transport libraries (may need electron-rebuild)
+- serialport (https://www.npmjs.com/package/serialport) — for COM port / USB-serial devices
+- usb (https://www.npmjs.com/package/usb) — low-level USB, used by escpos-usb
+- bluetooth-serial-port (https://www.npmjs.com/package/bluetooth-serial-port) — Bluetooth SPP on Windows
+- node-bluetooth (https://www.npmjs.com/package/node-bluetooth) — alternative for Bluetooth
+
+D. Windows spooler / printer driver libs
+- printer (https://www.npmjs.com/package/printer) — access Windows print spooler (native)
+- pdf-to-printer (https://www.npmjs.com/package/pdf-to-printer) — spawn Windows print commands for PDFs (no native C++ bindings)
+
+E. Build tooling
+- electron-rebuild — rebuild native modules against your Electron version
+
+-----------------------------
+2) Install commands (suggested)
+-----------------------------
+Run these in the repo root (PowerShell). Install only the ones you want; this list installs all suggested packages so you have choices later.
+
+# install JS-only helpers and ESC/POS libraries
+npm install --save node-thermal-printer escpos pdf-to-printer
+
+# install native transport libs (may need rebuild)
+npm install --save serialport usb bluetooth-serial-port printer
+
+# install dev tool to rebuild native modules for Electron
+npm install --save-dev electron-rebuild
+
+Notes:
+- `serialport`, `usb`, `printer`, and `bluetooth-serial-port` contain native code. After `npm install` you must run `electron-rebuild` to compile them for your Electron version.
+
+-----------------------------
+3) package.json changes (build-time and packaging)
+-----------------------------
+You already have a `build` section. Add `asarUnpack` entries for native modules and an optional `postinstall` script to run electron-rebuild during development.
+
+Example edits to `package.json` (add or merge these):
+
+"devDependencies": {
+  "electron-rebuild": "^3.2.8",
+  ...
+},
+"scripts": {
+  "postinstall": "electron-builder install-app-deps && electron-rebuild -f -w usb -w serialport -w printer -w bluetooth-serial-port",
+  "rebuild-natives": "electron-rebuild -f -w usb -w serialport -w printer -w bluetooth-serial-port",
+  ...
+},
+"build": {
+  "asar": false,                // already set in your package.json
+  "asarUnpack": [
+    "node_modules/usb/**",
+    "node_modules/serialport/**",
+    "node_modules/printer/**",
+    "node_modules/bluetooth-serial-port/**"
+  ],
+  "files": ["electron/**/*", "beyon79/out/**/*", "package.json"]
+}
+
+Notes:
+- `asar` is false (you already set this) which is easier for native modules. If you later choose `asar:true`, ensure native module files are `asarUnpack`ed.
+- Running `electron-rebuild` ensures native modules are compiled for the Electron ABI you're using.
+
+-----------------------------
+4) Main-process integration examples (add to `electron/main.js`)
+-----------------------------
+A. IPC handler skeleton (recommended)
+
+// in electron/main.js
+const { ipcMain, app } = require('electron');
+const path = require('path');
+const fs = require('fs');
+
+function logPrint(...args) {
+  try {
+    const p = path.join(app.getPath('userData'), 'electron-print.log');
+    fs.appendFileSync(p, `[${new Date().toISOString()}] ${args.map(String).join(' ')}\n`);
+  } catch(e){}
+}
+
+// Generic IPC handler
+ipcMain.handle('print-receipt', async (event, { mode = 'tcp', order, config = {} }) => {
+  try {
+    logPrint('ipc print start', mode, config);
+    if (mode === 'tcp') {
+      return await printEscPosTcp(order, config);
+    }
+    if (mode === 'node-thermal-printer') {
+      return await printWithNodeThermalPrinter(order, config);
+    }
+    if (mode === 'spool') {
+      return await printWithSpooler(order, config);
+    }
+    // add other modes as needed
+    return { success: false, error: 'unsupported_mode' };
+  } catch (e) {
+    logPrint('ipc print error', e && e.message);
+    return { success: false, error: e && e.message };
+  }
+});
+
+B. ESC/POS over TCP (raw socket) — simplest, no native modules required
+
+const net = require('net');
+
+function formatEscString(order) {
+  // Very basic ASCII receipt. For advanced formatting, include ESC/POS commands.
+  let s = '';
+  s += '\x1b\x40'; // Initialize printer
+  s += (order.shopName || 'Shop') + '\n';
+  s += 'Order: ' + (order.id || '') + '\n';
+  s += '---------------------------\n';
+  (order.items || []).forEach(it => {
+    s += `${it.name} x${it.qty}  ₹${it.price}\n`;
+  });
+  s += '---------------------------\n';
+  s += 'Total: ₹' + (order.total || '') + '\n\n\n';
+  s += '\x1d\x56\x00'; // cut (may not work on all printers)
+  return Buffer.from(s, 'binary');
+}
+
+function printEscPosTcp(order, { host, port = 9100, timeout = 5000 } = {}) {
+  return new Promise((resolve) => {
+    const client = new net.Socket();
+    const buf = formatEscString(order);
+    let resolved = false;
+
+    client.setTimeout(timeout);
+    client.connect(port, host, () => {
+      client.write(buf, () => client.end());
+    });
+
+    client.on('close', () => { if (!resolved) { resolved = true; logPrint('tcp print success', host); resolve({ success: true }); } });
+    client.on('error', (err) => { if (!resolved) { resolved = true; logPrint('tcp print error', err && err.message); resolve({ success: false, error: err && err.message }); } });
+    client.on('timeout', () => { if (!resolved) { resolved = true; client.destroy(); logPrint('tcp print timeout'); resolve({ success: false, error: 'timeout' }); } });
+  });
+}
+
+C. Using node-thermal-printer (supports network, USB, serial)
+
+// npm i node-thermal-printer
+const ThermalPrinter = require('node-thermal-printer').printer;
+const PrinterTypes = require('node-thermal-printer').types;
+
+async function printWithNodeThermalPrinter(order, config = {}) {
+  // config example: { type: PrinterTypes.EPSON, interface: 'tcp://192.168.0.100:9100' }
+  const printer = new ThermalPrinter({
+    type: config.type || PrinterTypes.EPSON,
+    interface: config.interface || `tcp://${config.host}:${config.port || 9100}`,
+    characterSet: 'SLOVENIA',
+  });
+
+  try {
+    printer.alignCenter();
+    printer.println(order.shopName || 'Shop');
+    printer.newLine();
+    (order.items || []).forEach(i => {
+      printer.println(`${i.name} x${i.qty}  ₹${i.price}`);
+    });
+    printer.newLine();
+    printer.println('Total: ₹' + (order.total || ''));
+    printer.cut();
+
+    const execute = await printer.execute();
+    logPrint('node-thermal print execute', execute);
+    return { success: true };
+  } catch (e) {
+    logPrint('node-thermal error', e && e.message);
+    return { success: false, error: e && e.message };
+  }
+}
+
+D. USB example with escpos (needs `usb` native module)
+
+// Using escpos with usb adapter
+// npm i escpos
+const escpos = require('escpos');
+escpos.USB = require('escpos-usb'); // make sure usb binding is available
+
+function printWithEscposUsb(order, usbOptions) {
+  return new Promise((resolve) => {
+    try {
+      const device = new escpos.USB(usbOptions); // vendorId/productId or leave empty for first device
+      const printer = new escpos.Printer(device);
+      device.open(() => {
+        printer
+          .align('CT')
+          .text(order.shopName || 'Shop')
+          .newline()
+          .tableCustom([/*...*/])
+          .cut()
+          .close();
+        resolve({ success: true });
+      });
+    } catch (e) {
+      logPrint('escpos usb error', e && e.message);
+      resolve({ success: false, error: e && e.message });
+    }
+  });
+}
+
+E. Bluetooth (SPP) example (bluetooth-serial-port)
+
+// npm i bluetooth-serial-port
+const BTSerialPort = require('bluetooth-serial-port');
+function printBluetooth(order, { address, channel = 1 }) {
+  return new Promise((resolve) => {
+    const bt = new BTSerialPort.BluetoothSerialPort();
+    bt.connect(address, channel, () => {
+      const buf = formatEscString(order);
+      bt.write(buf, (err) => {
+        bt.close();
+        if (err) { logPrint('bt write error', err && err.message); resolve({ success:false, error: err.message }); }
+        else resolve({ success: true });
+      });
+    }, (err) => { logPrint('bt connect error', err); resolve({ success:false, error: err && err.message }); });
+  });
+}
+
+F. Windows spooler fallback (BrowserWindow.print or node-printer)
+
+- Use BrowserWindow.print({ silent:true, deviceName }) to print an HTML receipt using the Windows driver.
+- Or use `printer` or `pdf-to-printer` to send PDFs directly to the Windows printer.
+
+Example: use BrowserWindow approach for formatted HTML receipts (we already added code elsewhere): create a hidden BrowserWindow, load the exported `print-receipt.html` (or a local route), then call win.webContents.print({ silent:true, deviceName }).
+
+-----------------------------
+5) Preload & renderer exposure
+-----------------------------
+In `electron/preload.js` expose a safe API to call printing from renderer:
+
+const { contextBridge, ipcRenderer } = require('electron');
+contextBridge.exposeInMainWorld('electronAPI', {
+  printReceipt: (order, opts = {}) => ipcRenderer.invoke('print-receipt', { order, ...opts }),
+});
+
+In renderer (admin UI), call:
+
+const res = await window.electronAPI.printReceipt(order, { mode: 'tcp', config: { host: '192.168.0.100', port: 9100 } });
+if (!res.success) console.error('print failed', res.error);
+
+-----------------------------
+6) Packaging & build steps
+-----------------------------
+1) After `npm install`, run electron-rebuild for native modules:
+
+npx electron-rebuild -f -w usb -w serialport -w printer -w bluetooth-serial-port
+
+2) Ensure packaging includes native modules unpacked by adding `asarUnpack` (see package.json changes above).
+
+3) When building, check the `dist/win-unpacked/resources/app.asar` or `dist/win-unpacked/resources` for native module files. Prefer `asar:false` to keep files accessible.
+
+4) If you add `node-thermal-printer` or `escpos`, ensure the `node_modules` for those packages are included by builder (they usually are if `files` includes `node_modules` or you include the necessary files). We prefer `asar:false` (you already configured that in package.json).
+
+-----------------------------
+7) Test checklist (developer)
+-----------------------------
+- Network ESC/POS (fastest):
+  - Have printer IP + port (9100). From a terminal, test with:
+    - Windows: `tftp` or use a third-party utility or use `nc` if available.
+    - Or run a quick Node script that connects to port 9100 and writes test bytes (we provide one above).
+  - Use `mode:'tcp'` call from the renderer and confirm paper prints.
+
+- Node-thermal-printer / escpos (USB/Serial):
+  - Test in dev (not packaged) first. Run small Node script invoking node-thermal-printer with interface = usb or serial.
+  - Rebuild natives (`electron-rebuild`) and package; test the packaged EXE on a test machine with printer.
+
+- Bluetooth SPP:
+  - Pair the device in Windows settings first. Use the device address in the Bluetooth call. Test with `bluetooth-serial-port`.
+
+- Windows spooler fallback:
+  - Install the printer in Windows. Use `BrowserWindow.print({ deviceName })` with exact driver name or use `pdf-to-printer` to send a PDF of the receipt.
+
+-----------------------------
+8) Troubleshooting & tips
+-----------------------------
+- Permission/driver issues: Windows drivers often require admin install. Ensure you can print from Windows notepad first.
+- Encoding: Many ESC/POS printers prefer ASCII or CP437/CP857; for Unicode or logos, you must send image data or use supported charsets.
+- Cut/drawer: commands vary between printers. Test `\x1dV\x00` for cut and `\x07` sequences for drawer kick depending on model.
+- Timeouts: add sensible timeouts when contacting hardware.
+- Safety: validate order object in main process; do not accept arbitrary file paths or HTML from renderer.
+
+-----------------------------
+9) Summary of files to edit in your repo
+-----------------------------
+- `electron/main.js` — add IPC handlers and printing functions (examples above)
+- `electron/preload.js` — expose `printReceipt` to renderer
+- `beyon79/*` (renderer) — call `window.electronAPI.printReceipt(order, opts)` where you trigger print
+- `package.json` — add native package dependencies if needed, add `postinstall` / `rebuild-natives` script, update `build.asarUnpack`
+- `beyon79/out/print-receipt.html` or Next page `pages/print-receipt` — a printable HTML template if you use BrowserWindow printing
+
+-----------------------------
+10) Next steps I can do for you
+-----------------------------
+- Add a `printWithEscPosTcp` implementation into `electron/main.js` and wire up the IPC handler + preload exposure.
+- Add a `node-thermal-printer` example and an optional USB example (requires installing `usb` and `electron-rebuild` afterwards).
+- Add a small sample Node script `scripts/print-test.js` that you can run locally to test network printing (no Electron needed).
+
+If you want me to implement the network ESC/POS support now (TCP socket + IPC + renderer example), reply "implement ESC/POS TCP" and I will add the code and a small test script to the repo.
+
+
+--- End of Thermal_print.txt

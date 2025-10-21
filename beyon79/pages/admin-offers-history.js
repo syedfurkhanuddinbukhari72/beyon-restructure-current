@@ -100,7 +100,7 @@ export default function OffersHistoryPage() {
           <h1 className="text-xl font-bold text-gray-800">Offers History</h1>
           <div className="flex items-center gap-2">
             <button onClick={() => router.push('/admin-offers-current')} className="px-3.5 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200">Back to Current Offers</button>
-            <button onClick={() => router.push('/admin-offers')} className="px-3.5 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200">Back to Apply Offers</button>
+            <button onClick={() => router.push('/admin-offers')} className="px-3.5 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-800 hover:bg-orange-500 hover:text-white transition-colors">Back to Apply Offers</button>
           </div>
         </div>
 

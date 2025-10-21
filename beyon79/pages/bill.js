@@ -2,7 +2,7 @@ import { useRouter } from 'next/router';
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import menuData from '../data/menuData.json';
 import offers from '../data/offers.json';
-import { ArrowLeftIcon, ArrowDownTrayIcon, ShareIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, ArrowDownTrayIcon, ShareIcon, PrinterIcon } from '@heroicons/react/24/outline';
 
 const BillPrintTemplate = forwardRef(function BillPrintTemplate({ bill }, ref) {
   const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
@@ -191,6 +191,7 @@ export default function BillPage() {
   const printTemplateRef = useRef(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState(null);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   useEffect(() => {
     // try query param first
@@ -416,6 +417,41 @@ export default function BillPage() {
     }
   };
 
+  const printReceipt = useCallback(async () => {
+    try {
+      setIsPrinting(true);
+      setGenerateError(null);
+      // Build a simple order payload from billData
+      const order = {
+        id: (billData?.meta && (billData.meta.orderId || billData.meta._id)) || `manual-${Date.now()}`,
+        shopName: 'BEYON79',
+        items: (billData?.lines || []).map(l => ({ name: l.desc, qty: l.qty || 0, price: l.unitPrice || 0 })),
+        subtotal: billData?.subtotal || 0,
+        total: billData?.total || 0,
+        meta: billData?.meta || {},
+      };
+
+      // If running inside Electron with the exposed API, invoke IPC print
+      if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.printReceipt === 'function') {
+        const res = await window.electronAPI.printReceipt(order, { silent: true });
+        if (!res || !res.success) {
+          // fallback to PDF generation if print failed
+          console.warn('Print failed, falling back to PDF', res && res.error);
+          setGenerateError(res && res.error ? String(res.error) : 'Print failed');
+          await downloadPDF();
+        }
+      } else {
+        // Not in Electron: fall back to generating PDF for manual printing
+        await downloadPDF();
+      }
+    } catch (err) {
+      console.error('printReceipt error', err);
+      setGenerateError(err?.message || String(err));
+    } finally {
+      setIsPrinting(false);
+    }
+  }, [billData, downloadPDF]);
+
   if (loading) return <div className="p-6">Loading...</div>;
   if (!billData) return <div className="p-6">No bill data found.</div>;
 
@@ -442,6 +478,19 @@ export default function BillPage() {
             aria-busy={isGenerating}
           >
             <ArrowDownTrayIcon className="h-5 w-5" />
+          </button>
+          <button
+            onClick={printReceipt}
+            disabled={isPrinting}
+            className={`bg-gray-100 text-gray-800 border border-gray-300 p-2 rounded-full transition-colors ${isPrinting ? 'opacity-60 cursor-not-allowed' : 'hover:bg-orange-500 hover:text-white'}`}
+            aria-label="Print"
+            aria-busy={isPrinting}
+          >
+            {isPrinting ? (
+              <PrinterIcon className="h-5 w-5 animate-spin" />
+            ) : (
+              <PrinterIcon className="h-5 w-5" />
+            )}
           </button>
           <button
             onClick={share}

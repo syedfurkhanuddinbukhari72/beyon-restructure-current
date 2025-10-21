@@ -191,6 +191,29 @@ function OrderRow({ order, tab, now, updateStatus, updateLocalStatus, onToggleEx
         {!["archived", "cancelled"].includes(s) && (
           <Action label="×" title="Cancel" color="red" onClick={() => onSet("cancelled")} />
         )}
+        {/* Print button: uses electronAPI.printReceipt when available, otherwise opens print page */}
+        <Action
+          label="🖨"
+          title="Print Receipt"
+          color="default"
+          onClick={() => {
+            try {
+              if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.printReceipt === 'function') {
+                // Electron: send order to main process to print
+                window.electronAPI.printReceipt(order).then((res) => {
+                  if (!res || !res.success) console.warn('Print failed', res && res.failureReason);
+                });
+              } else {
+                // Web: open print page with order in query string
+                const q = encodeURIComponent(JSON.stringify(order || {}));
+                const url = `/print-receipt?order=${q}`;
+                window.open(url, '_blank');
+              }
+            } catch (e) {
+              console.error('Print action failed', e);
+            }
+          }}
+        />
       </>
     );
   };
@@ -304,7 +327,7 @@ export default function AdminPage() {
   const [shopStatus, setShopStatus] = useState({ isOpen: true });
   const [menu, setMenu] = useState({});
   const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(false);
+    const [fetching, setFetching] = useState(false);
   const fetchingRef = useRef(false);
   const [lazyLoad, setLazyLoad] = useState(false);
   const [toast, setToast] = useState("");
@@ -326,6 +349,12 @@ export default function AdminPage() {
   const [showAddItem, setShowAddItem] = useState(false);
   const [showOffers, setShowOffers] = useState(false);
   const [offersBusy, setOffersBusy] = useState(false);
+  // Remove modal selection state (replaced by single-item removeForm)
+  const [removeBusy, setRemoveBusy] = useState(false);
+  // Single-item remove form (desktop UX)
+  const [removeForm, setRemoveForm] = useState({ category: "", productName: "" });
+  // Add/Remove menu toggle
+  const [showAddRemoveMenu, setShowAddRemoveMenu] = useState(false);
   const [offerForm, setOfferForm] = useState({
     scope: 'all', // 'all' | 'category' | 'item'
     category: '',
@@ -342,6 +371,7 @@ export default function AdminPage() {
     name: "",
     price: "",
     inStock: true,
+    isChicken: false,
   });
   const [addBusy, setAddBusy] = useState(false);
   const categoryList = useMemo(() => {
@@ -425,6 +455,9 @@ export default function AdminPage() {
     try {
       const data = await localData.getMenu();
       setMenu(data);
+      // Also refresh bundle rules since they are related to offers
+      const rules = await localData.getOffersRules();
+      setBundleRules((rules || []).filter((r) => r && r.active !== false));
     } catch (err) {
       console.error("Error fetching menu:", err);
     }
@@ -498,13 +531,82 @@ export default function AdminPage() {
       });
       const data = await localData.getMenu();
       setMenu(data);
-      setShowAddItem(false);
-      setAddForm({ category: "", isNewCategory: false, newCategory: "", name: "", price: "", inStock: true });
+  setShowAddItem(false);
+  setAddForm({ category: chosenCategory, isNewCategory: false, newCategory: "", name: "", price: "", inStock: true, isChicken: false });
+  // Prepare remove form to point to the newly added/updated item for convenience
+  setRemoveForm({ category: chosenCategory, productName: name });
       setToast(dup ? "Item updated." : "Item added.");
     } catch (e) {
       setToast(`Failed to add item: ${e.message || e}`);
     } finally {
       setAddBusy(false);
+    }
+  };
+
+  // Helpers for desktop add/remove modal
+  const removeItemsForCategory = useMemo(() => {
+    if (!removeForm.category) return [];
+    const items = Array.isArray(menu?.[removeForm.category]) ? menu[removeForm.category] : [];
+    return items.map((item) => item?.name).filter(Boolean);
+  }, [menu, removeForm.category]);
+
+  const hasRemoveItems = removeItemsForCategory.length > 0;
+
+  const resetAddForm = useCallback(() => {
+    setAddForm({
+      category: "",
+      isNewCategory: false,
+      newCategory: "",
+      name: "",
+      price: "",
+      inStock: true,
+      isChicken: false,
+    });
+  }, []);
+
+  const handleCloseProductModal = () => {
+    setShowAddItem(false);
+    setModalMode('add');
+    resetAddForm();
+    setRemoveForm({ category: "", productName: "" });
+    setAddBusy(false);
+    setRemoveBusy(false);
+  };
+
+  // ✅ Remove single item (desktop flow)
+  const submitRemoveItem = async () => {
+    if (removeBusy) return;
+    const category = (removeForm.category || "").trim();
+    const productName = (removeForm.productName || "").trim();
+    if (!category) {
+      setToast("Select a category to remove from.");
+      return;
+    }
+    if (!productName) {
+      setToast("Select an item to remove.");
+      return;
+    }
+    try {
+      setRemoveBusy(true);
+      await localData.removeProduct(category, productName);
+      const data = await localData.getMenu();
+      setMenu(data);
+      const nextCategories = Object.keys(data || {}).sort((a, b) => a.localeCompare(b));
+      const nextCategory = nextCategories.includes(category) ? category : (nextCategories[0] || "");
+      const nextItems = nextCategory && Array.isArray(data?.[nextCategory]) ? data[nextCategory] : [];
+      const nextProduct = nextItems.find((item) => item?.name === productName)
+        ? productName
+        : (nextItems[0]?.name || "");
+      setRemoveForm({ category: nextCategory, productName: nextProduct });
+      setToast(`Removed '${productName}'.`);
+      if (!nextCategory) {
+        setModalMode('add');
+      }
+    } catch (e) {
+      console.error('removeProduct error', e);
+      setToast(`Failed to remove item: ${e.message || e}`);
+    } finally {
+      setRemoveBusy(false);
     }
   };
 
@@ -523,8 +625,11 @@ export default function AdminPage() {
         localData.getLocalOrders(),
       ]);
 
-      console.log("Backend orders:", backendOrders.length);
-      console.log("Local orders:", localOrdersData.length);
+  // Guarded logs: backendOrders/localOrdersData might be undefined or not arrays
+  const backendCount = Array.isArray(backendOrders) ? backendOrders.length : 0;
+  const localCount = Array.isArray(localOrdersData) ? localOrdersData.length : 0;
+  console.log("Backend orders:", backendCount);
+  console.log("Local orders:", localCount);
 
       setOrders(backendOrders || []);
       setLocalOrders(localOrdersData || []);
@@ -872,6 +977,25 @@ export default function AdminPage() {
     }
   }, [tab, fetchMenu]);
 
+  // ✅ Refresh menu data when returning to Products tab (for offer updates)
+  useEffect(() => {
+    if (tab === "Products") {
+      // Force refresh menu data to show any newly applied offers
+      const refreshMenuForOffers = async () => {
+        try {
+          const data = await localData.getMenu();
+          setMenu(data);
+          // Also refresh bundle rules
+          const rules = await localData.getOffersRules();
+          setBundleRules((rules || []).filter((r) => r && r.active !== false));
+        } catch (err) {
+          console.error("Error refreshing menu for offers:", err);
+        }
+      };
+      refreshMenuForOffers();
+    }
+  }, [tab]);
+
   // ✅ Fetch Shop Status on mount
   useEffect(() => {
     fetchShopStatus();
@@ -1115,19 +1239,10 @@ export default function AdminPage() {
               </button>
               <button
                 onClick={() => {
-                  setAddForm((f) => ({
-                    category: categoryList[0] || "",
-                    isNewCategory: false,
-                    newCategory: "",
-                    name: "",
-                    price: "",
-                    inStock: true,
-                    isChicken: false,
-                  }));
-                  setModalMode('add');
-                  setShowAddItem(true);
+                  // Show the small choice popup modal (Add / Remove)
+                  setShowAddRemoveMenu(true);
                 }}
-                className="px-3.5 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200"
+                className="px-3.5 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-800 hover:bg-orange-500 hover:text-white transition-colors"
               >
                 Add/Remove Items
               </button>
@@ -1135,7 +1250,7 @@ export default function AdminPage() {
                 onClick={() => {
                   router.push('/admin-offers');
                 }}
-                className="px-3.5 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200"
+                className="px-3.5 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-800 hover:bg-orange-500 hover:text-white transition-colors"
               >
                 Apply Offers
               </button>
@@ -1415,7 +1530,7 @@ export default function AdminPage() {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="mb-4">
               <button
-                onClick={() => setShowOffers(true)}
+                onClick={() => router.push('/admin-offers')}
                 className="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600"
               >
                 Create New Offer
@@ -1526,6 +1641,254 @@ export default function AdminPage() {
         )
       )}
       </div>
+
+      {/* Add / Remove Items Modal */}
+      {/* Small centered choice popup for Add vs Remove */}
+      {showAddRemoveMenu && (
+        <div className="fixed inset-0 z-[1050] flex items-center justify-center bg-black/30 p-4" onClick={() => setShowAddRemoveMenu(false)}>
+          <div className="bg-white rounded-lg p-4 w-full max-w-xs shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <h4 className="text-lg font-medium mb-3">Choose action</h4>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => { setModalMode('add'); setShowAddItem(true); setShowAddRemoveMenu(false); }}
+                className="w-full py-2 px-3 rounded bg-orange-500 text-white"
+              >
+                Add Item
+              </button>
+              <button
+                onClick={() => { setModalMode('remove'); setShowAddItem(true); setShowAddRemoveMenu(false); }}
+                className="w-full py-2 px-3 rounded bg-red-600 text-white"
+              >
+                Remove Item
+              </button>
+              <button onClick={() => setShowAddRemoveMenu(false)} className="w-full py-2 px-3 rounded bg-gray-100">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showAddItem && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 px-4">
+          <div className="relative w-full max-w-xl rounded-2xl bg-white shadow-2xl">
+            <button
+              type="button"
+              onClick={handleCloseProductModal}
+              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              aria-label="Close modal"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <div className="px-6 py-6">
+              <h3 className="text-lg font-semibold text-gray-900">Manage Products</h3>
+              <p className="mt-1 text-sm text-gray-500">Add new menu items or remove existing ones from the product list.</p>
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalMode('add')}
+                  className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                    modalMode === 'add'
+                      ? 'bg-orange-500 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Add Item
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalMode('remove')}
+                  disabled={categoryList.length === 0}
+                  className={`flex-1 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                    categoryList.length === 0
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : modalMode === 'remove'
+                        ? 'bg-orange-500 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Remove Item
+                </button>
+              </div>
+
+              {modalMode === 'add' ? (
+                <form className="mt-5 space-y-4" onSubmit={(e) => { e.preventDefault(); submitAddItem(); }}>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-semibold text-gray-800" htmlFor="modal-add-category">Category</label>
+                      <label className="flex items-center gap-2 text-xs text-gray-600" htmlFor="modal-add-new-category">
+                        <input
+                          id="modal-add-new-category"
+                          type="checkbox"
+                          checked={addForm.isNewCategory}
+                          onChange={(e) => setAddForm((prev) => ({
+                            ...prev,
+                            isNewCategory: e.target.checked,
+                            category: e.target.checked ? "" : (categoryList[0] || prev.category || ""),
+                            newCategory: e.target.checked ? prev.newCategory : "",
+                          }))}
+                          className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+                        />
+                        Create new category
+                      </label>
+                    </div>
+                    <div className="mt-2">
+                      {addForm.isNewCategory ? (
+                        <input
+                          id="modal-add-category"
+                          value={addForm.newCategory}
+                          onChange={(e) => setAddForm((prev) => ({ ...prev, newCategory: e.target.value }))}
+                          placeholder="Enter new category name"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                        />
+                      ) : (
+                        <select
+                          id="modal-add-category"
+                          value={addForm.category}
+                          onChange={(e) => setAddForm((prev) => ({ ...prev, category: e.target.value }))}
+                          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                        >
+                          <option value="">Select category</option>
+                          {categoryList.map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-800" htmlFor="modal-add-name">Product name</label>
+                    <input
+                      id="modal-add-name"
+                      value={addForm.name}
+                      onChange={(e) => setAddForm((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g. Classic Burger"
+                      className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-800" htmlFor="modal-add-price">Price (optional)</label>
+                    <input
+                      id="modal-add-price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={addForm.price}
+                      onChange={(e) => setAddForm((prev) => ({ ...prev, price: e.target.value }))}
+                      placeholder="Enter price"
+                      className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={addForm.inStock}
+                        onChange={(e) => setAddForm((prev) => ({ ...prev, inStock: e.target.checked }))}
+                        className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+                      />
+                      Mark as in stock
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={addForm.isChicken}
+                        onChange={(e) => setAddForm((prev) => ({ ...prev, isChicken: e.target.checked }))}
+                        className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+                      />
+                      Chicken item
+                    </label>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-4">
+                    <button
+                      type="button"
+                      onClick={handleCloseProductModal}
+                      className="rounded-full px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={addBusy}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors ${addBusy ? 'bg-orange-300 cursor-not-allowed opacity-70' : 'bg-orange-500 hover:bg-orange-600'}`}
+                    >
+                      {addBusy ? 'Saving...' : 'Save Item'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <form className="mt-5 space-y-4" onSubmit={(e) => { e.preventDefault(); submitRemoveItem(); }}>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-800" htmlFor="modal-remove-category">Category</label>
+                    <select
+                      id="modal-remove-category"
+                      value={removeForm.category}
+                      onChange={(e) => {
+                        const selectedCategory = e.target.value;
+                        const items = Array.isArray(menu?.[selectedCategory]) ? menu[selectedCategory] : [];
+                        const firstName = items.find((item) => item?.name)?.name || "";
+                        setRemoveForm({ category: selectedCategory, productName: firstName });
+                      }}
+                      className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                    >
+                      <option value="">Select category</option>
+                      {categoryList.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-800" htmlFor="modal-remove-item">Item</label>
+                    {hasRemoveItems ? (
+                      <select
+                        id="modal-remove-item"
+                        value={removeForm.productName}
+                        onChange={(e) => setRemoveForm((prev) => ({ ...prev, productName: e.target.value }))}
+                        className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                      >
+                        <option value="">Select item</option>
+                        {removeItemsForCategory.map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="mt-2 rounded-lg border border-dashed border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-700">
+                        No items in this category.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg bg-red-50 px-3 py-3 text-sm text-red-700">
+                    Removing an item deletes it from the offline menu. This action cannot be undone.
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-4">
+                    <button
+                      type="button"
+                      onClick={handleCloseProductModal}
+                      className="rounded-full px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={removeBusy || !hasRemoveItems || !removeForm.productName}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors ${removeBusy || !hasRemoveItems || !removeForm.productName ? 'bg-red-300 cursor-not-allowed opacity-70' : 'bg-red-500 hover:bg-red-600'}`}
+                    >
+                      {removeBusy ? 'Removing...' : 'Remove Item'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

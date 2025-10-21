@@ -1,7 +1,7 @@
 import localforage from "localforage";
 
 // Configure storage
-localforage.config({ 
+localforage.config({
   name: "restaurant_admin_offline",
   description: "Restaurant Admin Offline Data Storage"
 });
@@ -9,7 +9,7 @@ localforage.config({
 // Storage keys
 const KEYS = {
   MENU: "menu_v1",
-  ORDERS: "orders_v1", 
+  ORDERS: "orders_v1",
   SHOP: "shop_v1",
   OFFERS: "offers_v1"
 };
@@ -40,7 +40,7 @@ async function safeGet(key, fallback = null) {
   if (!key || typeof key !== 'string') {
     throw new Error(`Invalid storage key: ${key}`);
   }
-  
+
   try {
     const value = await localforage.getItem(key);
     return value !== null ? value : fallback;
@@ -57,7 +57,7 @@ async function safeSet(key, value) {
   if (!key || typeof key !== 'string') {
     throw new Error(`Invalid storage key: ${key}`);
   }
-  
+
   try {
     await localforage.setItem(key, value);
     return true;
@@ -77,7 +77,7 @@ async function safeSet(key, value) {
 export async function initLocalStore(seedData = {}) {
   try {
     console.log("Initializing local storage...");
-    
+
     const defaults = {
       menu: {},
       orders: [],
@@ -89,14 +89,14 @@ export async function initLocalStore(seedData = {}) {
     for (const [dataKey, defaultValue] of Object.entries(defaults)) {
       const storageKey = KEYS[dataKey.toUpperCase()];
       const existing = await localforage.getItem(storageKey);
-      
+
       if (existing === null) {
         const seedValue = seedData[dataKey] || defaultValue;
         await safeSet(storageKey, seedValue);
         console.log(`Initialized ${dataKey} with ${Array.isArray(seedValue) ? seedValue.length : Object.keys(seedValue).length} items`);
       }
     }
-    
+
     console.log("Local storage initialization completed successfully");
     return true;
   } catch (error) {
@@ -126,30 +126,30 @@ export async function upsertProduct(category, product) {
   if (!category || !product || !product.name) {
     throw new Error("Invalid category or product data");
   }
-  
+
   const menu = await getMenu();
-  
+
   if (!menu[category]) {
     menu[category] = [];
   }
-  
+
   const productList = menu[category];
-  const existingIndex = productList.findIndex(p => 
+  const existingIndex = productList.findIndex(p =>
     p.name?.toLowerCase() === product.name?.toLowerCase()
   );
-  
+
   const updatedProduct = {
     ...product,
     inStock: Boolean(product.inStock),
     manualOverride: Boolean(product.manualOverride)
   };
-  
+
   if (existingIndex >= 0) {
     productList[existingIndex] = { ...productList[existingIndex], ...updatedProduct };
   } else {
     productList.push(updatedProduct);
   }
-  
+
   return saveMenu(menu);
 }
 
@@ -159,11 +159,11 @@ export async function upsertProduct(category, product) {
 export async function bulkToggleChickenItems(enable, excludeItems = []) {
   try {
     const menu = await getMenu();
-    
+
     if (!menu || typeof menu !== 'object') {
       throw new Error("Invalid menu data structure");
     }
-    
+
     let changedCount = 0;
 
     Object.keys(menu).forEach(category => {
@@ -171,13 +171,13 @@ export async function bulkToggleChickenItems(enable, excludeItems = []) {
         console.warn(`Category ${category} is not an array, skipping`);
         return;
       }
-      
+
       menu[category].forEach(item => {
         if (!item || typeof item !== 'object') {
           console.warn(`Invalid item in category ${category}, skipping`);
           return;
         }
-        
+
         if (item.isChicken && !excludeItems.includes(item.name)) {
           item.inStock = enable;
           item.manualOverride = true;
@@ -195,7 +195,7 @@ export async function bulkToggleChickenItems(enable, excludeItems = []) {
 }
 
 // =============================================================================
-// ORDER OPERATIONS  
+// ORDER OPERATIONS
 // =============================================================================
 
 export async function getAllOrders() {
@@ -224,10 +224,10 @@ export async function upsertLocalOrder(orderData) {
   if (!orderData || typeof orderData !== 'object') {
     throw new Error("Invalid order data");
   }
-  
+
   const orders = await getAllOrders();
   const orderId = orderData._id || `local-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-  
+
   const order = {
     ...orderData,
     _id: orderId,
@@ -235,15 +235,15 @@ export async function upsertLocalOrder(orderData) {
     createdAt: orderData.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
-  
+
   const existingIndex = orders.findIndex(o => o._id === orderId);
-  
+
   if (existingIndex >= 0) {
     orders[existingIndex] = { ...orders[existingIndex], ...order };
   } else {
     orders.unshift(order); // Add to beginning
   }
-  
+
   await saveAllOrders(orders);
   return order;
 }
@@ -252,21 +252,21 @@ export async function updateOrderStatus(orderId, status, timestamps = {}) {
   if (!orderId || !status) {
     throw new Error("Order ID and status are required");
   }
-  
+
   const orders = await getAllOrders();
   const orderIndex = orders.findIndex(order => order._id === orderId);
-  
+
   if (orderIndex === -1) {
     throw new Error(`Order with ID ${orderId} not found`);
   }
-  
+
   orders[orderIndex] = {
     ...orders[orderIndex],
     status,
     updatedAt: new Date().toISOString(),
     ...timestamps
   };
-  
+
   await saveAllOrders(orders);
   return orders[orderIndex];
 }
@@ -284,7 +284,7 @@ export async function getShopStatus() {
 }
 
 export async function setShopStatus(isOpen) {
-  const status = { 
+  const status = {
     isOpen: Boolean(isOpen),
     updatedAt: new Date().toISOString()
   };
@@ -317,19 +317,19 @@ export async function importOrdersFromJSON(jsonData) {
   if (!jsonData) {
     throw new Error("No data provided for import");
   }
-  
+
   const importedOrders = Array.isArray(jsonData) ? jsonData : (jsonData?.orders || []);
   const existingOrders = await getAllOrders();
-  
+
   let importedCount = 0;
-  
+
   for (const orderData of importedOrders) {
     if (!orderData._id) {
       orderData._id = `imported-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     }
-    
+
     const existingIndex = existingOrders.findIndex(order => order._id === orderData._id);
-    
+
     if (existingIndex >= 0) {
       existingOrders[existingIndex] = { ...existingOrders[existingIndex], ...orderData };
     } else {
@@ -337,7 +337,7 @@ export async function importOrdersFromJSON(jsonData) {
       importedCount++;
     }
   }
-  
+
   await saveAllOrders(existingOrders);
   console.log(`Imported ${importedCount} new orders`);
   return existingOrders;
@@ -347,7 +347,7 @@ export async function importMenuFromJSON(menuData) {
   if (!menuData || typeof menuData !== 'object') {
     throw new Error("Invalid menu data for import");
   }
-  
+
   await saveMenu(menuData);
   console.log("Menu imported successfully");
   return menuData;
@@ -381,7 +381,7 @@ export async function getStorageStats() {
       totalKeys: keys.length,
       keys: keys
     };
-    
+
     for (const key of keys) {
       const value = await localforage.getItem(key);
       stats[key] = {
@@ -389,7 +389,7 @@ export async function getStorageStats() {
         length: Array.isArray(value) ? value.length : Object.keys(value || {}).length
       };
     }
-    
+
     return stats;
   } catch (error) {
     console.error("Failed to get storage stats:", error);
@@ -404,13 +404,13 @@ export async function getStorageStats() {
 export default {
   // Initialization
   initLocalStore,
-  
+
   // Menu operations
   getMenu,
   saveMenu,
   upsertProduct,
   bulkToggleChickenItems,
-  
+
   // Order operations
   getAllOrders,
   saveAllOrders,
@@ -420,19 +420,19 @@ export default {
   updateOrderStatus,
   updateLocalOrderStatus,
   updateBackendOrderStatus,
-  
+
   // Shop operations
   getShopStatus,
   setShopStatus,
-  
+
   // Offers operations
   getOffersRules,
   saveOffersRules,
-  
+
   // Import/Export
   importOrdersFromJSON,
   importMenuFromJSON,
-  
+
   // Utilities
   clearAllData,
   getStorageStats

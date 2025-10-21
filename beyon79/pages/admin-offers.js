@@ -61,7 +61,10 @@ export default function AdminOffersPage() {
   const fetchMenu = useCallback(async () => {
     try {
       const stored = await getMenu();
-      const resolved = stored && Object.keys(stored).length > 0 ? stored : menuSeed;
+      // If stored menu exists but is partial, merge with seed so all categories exist.
+      // This prevents cases where stored menu only contains one category (eg. Rolls)
+      // and an "All Items" offer would then only affect that category.
+      const resolved = stored && Object.keys(stored).length > 0 ? { ...menuSeed, ...stored } : menuSeed;
       setMenu(resolved);
       setOfferForm((f) => {
         if (f.category) return f;
