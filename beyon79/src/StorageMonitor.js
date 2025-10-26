@@ -47,5 +47,7 @@ class StorageMonitor {
   }
 }
 
+const storageMonitorInstance = new StorageMonitor();
+
 // Export singleton instance
-export default new StorageMonitor();
+export default storageMonitorInstance;

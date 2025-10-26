@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 export default function CartScreen({
   items = [],
@@ -63,7 +63,45 @@ export default function CartScreen({
               <textarea id="note" value={note} onChange={(e) => setNote && setNote(e.target.value)} className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none" rows={3} placeholder="Add any special instructions..." />
             </div>
 
-            <button onClick={onPlaceOrder} style={{ backgroundColor: '#D1D5DB' }} className="w-full !bg-gray-300 text-gray-800 py-4 rounded-lg font-semibold text-lg !hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-colors">Place Order</button>
+            <button onClick={onPlaceOrder} style={{ backgroundColor: '#D1D5DB' }} className="w-full !bg-gray-300 text-gray-800 py-4 rounded-lg font-semibold text-lg !hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-colors" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onPlaceOrder(); } }}>Place Order</button>
+
+            {/* Keyboard shortcuts for cart when open */}
+            {(() => {
+              useEffect(() => {
+                const handleCartKey = (ev) => {
+                  try {
+                    console.log('[CartScreen] Key event:', ev.key, 'shift:', ev.shiftKey, 'ctrl:', ev.ctrlKey, 'alt:', ev.altKey, 'meta:', ev.metaKey);
+                    // If focus is in an input/textarea or contentEditable, ignore Enter so
+                    // typing customer details doesn't accidentally place the order.
+                    const active = document.activeElement;
+                    const tag = active && active.tagName ? active.tagName.toLowerCase() : '';
+                    const isTyping = tag === 'input' || tag === 'textarea' || (active && active.isContentEditable);
+                    console.log('[CartScreen] Key:', ev.key, 'isTyping:', isTyping);
+
+                    if (ev.key === 'Enter') {
+                      if (isTyping) {
+                        // Let the input handle the Enter (e.g., for number fields), do nothing.
+                        console.log('[CartScreen] Ignoring Enter because typing in input');
+                        return;
+                      }
+                      console.log('[CartScreen] Enter pressed, calling onPlaceOrder');
+                      ev.preventDefault();
+                      onPlaceOrder();
+                    }
+                  } catch (e) {
+                    console.log('[CartScreen] handleCartKey error', e);
+                  }
+                };
+
+                console.log('[CartScreen] Attaching keydown listener');
+                window.addEventListener('keydown', handleCartKey, { passive: false });
+                return () => {
+                  console.log('[CartScreen] Removing keydown listener');
+                  window.removeEventListener('keydown', handleCartKey, { passive: false });
+                };
+              }, [onPlaceOrder]);
+              return null;
+            })()}
 
             <button onClick={onWhatsApp} className="w-full flex items-center justify-center space-x-2 bg-green-500 text-white py-3 rounded-lg font-medium hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors" aria-label="Order via WhatsApp">
               <img src="/icons/whatsapp-icon.png" alt="WhatsApp logo" className="w-6 h-6 rounded-sm bg-white/10 p-0.5" width="24" height="24" />

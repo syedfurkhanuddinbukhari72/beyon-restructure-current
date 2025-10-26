@@ -1,23 +1,29 @@
 [
   {
-    "id": "1760606112483",
+    "id": "buy1get1_wrap_offer",
     "active": true,
     "type": "buy_x_get_y",
+    "name": "Buy 1 Get 1 Free on Chicken Wrap",
+    "description": "Buy 1 Chicken Wrap, Get 1 Free",
     "base": {
+      "quantity": 1,
       "match": {
-        "name": "Cheesy Chicken Wrap"
+        "name": "Chicken Wrap"
       },
-      "quantity": 2
+      "rewardPrice": 200
     },
     "reward": {
       "items": [
         {
-          "name": "Chicken Popcorn (Large)",
-          "price": 250,
-          "quantity": 1
+          "name": "Cheesy Crispy Chicken Sandwich",
+          "quantity": 1,
+          "price": 0,
+          "isOfferReward": true
         }
       ]
     },
-    "limitPerOrder": 1
+    "limitPerOrder": 5,
+    "createdAt": "2025-10-26T00:00:00.000Z",
+    "updatedAt": "2025-10-26T00:00:00.000Z"
   }
 ]

@@ -14,6 +14,9 @@ const KEYS = {
   OFFERS: "offers_v1"
 };
 
+/**
+ * Broadcast data changes to listeners
+ */
 function broadcastChange(topic) {
   if (typeof window === 'undefined') return;
   const detail = { type: topic, timestamp: Date.now() };
@@ -26,6 +29,23 @@ function broadcastChange(topic) {
     window.localStorage?.setItem(`localData:${topic}`, String(detail.timestamp));
   } catch (err) {
     // Ignore storage quota or access errors
+  }
+  // Also attempt BroadcastChannel publish for cross-renderer delivery
+  try { broadcastChannelPost(topic); } catch (e) { /* noop */ }
+}
+
+// Best-effort cross-window/process broadcast using BroadcastChannel for
+// environments like Electron where storage events or CustomEvent may not
+// cross renderer boundaries. This function is called by save methods above.
+function broadcastChannelPost(topic) {
+  try {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const bc = new BroadcastChannel('localData');
+    // post a small message and close the channel
+    bc.postMessage({ type: topic, timestamp: Date.now() });
+    try { bc.close(); } catch (e) { /* ignore */ }
+  } catch (e) {
+    // BroadcastChannel not available/blocked in this environment
   }
 }
 
@@ -151,6 +171,38 @@ export async function upsertProduct(category, product) {
   }
 
   return saveMenu(menu);
+}
+
+/**
+ * Remove a product from a category.
+ * Used by admin UI. Returns the updated menu.
+ */
+export async function removeProduct(category, productName) {
+  if (!category || !productName) {
+    throw new Error('Category and productName are required');
+  }
+
+  const menu = await getMenu();
+  if (!menu || typeof menu !== 'object') {
+    throw new Error('Invalid menu data');
+  }
+
+  if (!Array.isArray(menu[category])) {
+    throw new Error(`Category '${category}' not found`);
+  }
+
+  const before = menu[category].length;
+  menu[category] = menu[category].filter((p) => (p && p.name) ? p.name !== productName : true);
+  const after = menu[category].length;
+
+  // If category became empty, remove the category key entirely
+  if (menu[category].length === 0) {
+    delete menu[category];
+  }
+
+  await saveMenu(menu);
+  broadcastChange('menu');
+  return { success: true, removed: before - after, menu };
 }
 
 /**

@@ -91,7 +91,7 @@ export default function AdminOffersPage() {
     rewardName: '',
     rewardPrice: 0,
     rewardQuantity: 1,
-    requiredNames: '', // comma-separated for fixed_combo_price
+    requiredNames: '',
     comboPrice: '',
     limitPerOrder: 1,
   });
@@ -114,6 +114,31 @@ export default function AdminOffersPage() {
     fetchRules();
   }, [fetchRules]);
 
+  // Read prefill query param (JSON encoded) and apply to form state
+  useEffect(() => {
+    try {
+      const raw = router?.query?.prefill;
+      if (!raw) return;
+      const decoded = typeof raw === 'string' ? decodeURIComponent(raw) : raw;
+      const obj = JSON.parse(decoded || '{}');
+      // If discount prefill found
+      if (obj && obj.discount) {
+        const d = obj.discount;
+        setOfferType('discount');
+        setOfferForm((f) => ({ ...f, scope: 'item', category: d.category || f.category, item: d.productName || f.item, type: 'percent', amount: '' }));
+        // ensure UI shows that selection
+      }
+      // If bundle prefill found, populate ruleForm baseName to help building a rule
+      if (obj && obj.bundle) {
+        const b = obj.bundle;
+        setOfferType('bundle');
+        setRuleForm((r) => ({ ...r, baseName: b.baseName || r.baseName }));
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -128,12 +153,58 @@ export default function AdminOffersPage() {
       if (event.key === "localData:offers") fetchRules();
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[admin-offers] Tab became visible, reloading data');
+        fetchMenu();
+        fetchRules();
+      }
+    };
+
     window.addEventListener("localData:update", handleBroadcast);
     window.addEventListener("storage", handleStorage);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // BroadcastChannel for cross-tab communication
+    let bc;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('localData');
+        bc.onmessage = (msg) => {
+          try {
+            const type = msg?.data?.type;
+            if (type === 'menu') fetchMenu();
+            if (type === 'offers') fetchRules();
+          } catch (e) { /* noop */ }
+        };
+      }
+    } catch (e) { /* ignore */ }
+
+    // Polling fallback
+    let lastMenuCheck = Date.now();
+    let lastOffersCheck = Date.now();
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const menuTimestamp = localStorage.getItem('localData:menu');
+        const offersTimestamp = localStorage.getItem('localData:offers');
+        if (menuTimestamp && Number(menuTimestamp) > lastMenuCheck) {
+          lastMenuCheck = Date.now();
+          fetchMenu();
+        }
+        if (offersTimestamp && Number(offersTimestamp) > lastOffersCheck) {
+          lastOffersCheck = Date.now();
+          fetchRules();
+        }
+      } catch (e) { /* ignore */ }
+    }, 2000);
 
     return () => {
       window.removeEventListener("localData:update", handleBroadcast);
       window.removeEventListener("storage", handleStorage);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearInterval(pollInterval);
+      try { bc && bc.close(); } catch (e) {}
     };
   }, [fetchMenu, fetchRules]);
 
@@ -187,7 +258,7 @@ export default function AdminOffersPage() {
       await saveOffersRules(updatedRules);
       setRules(updatedRules);
       setToast('Rule added');
-      setRuleForm({ type: ruleForm.type, baseName: '', baseQuantity: 2, rewardName: '', rewardPrice: 0, rewardQuantity: 1, requiredNames: '', comboPrice: '', limitPerOrder: 1 });
+      setRuleForm({ type: ruleForm.type, baseName: '', baseQuantity: 2, rewardName: '', rewardPrice: 0, rewardQuantity: 1, requiredNames: '', limitPerOrder: 1 });
     } catch (e) {
       setToast(e.message || 'Failed to save rule');
     } finally {
@@ -346,20 +417,17 @@ export default function AdminOffersPage() {
     if (offersBusy) return;
     try {
       setOffersBusy(true);
-      // Revert offers by restoring original prices
-      const updatedMenu = { ...menu };
-      const categories = offerForm.scope === "category" ? [offerForm.category] : Object.keys(menu);
-      for (const cat of categories) {
-        if (updatedMenu[cat]) {
-          updatedMenu[cat] = updatedMenu[cat].map(item => {
-            if (offerForm.scope === "item" && item.name !== offerForm.item) return item;
-            if (item.originalPrice) {
-              return { ...item, price: item.originalPrice };
-            }
-            return item;
-          });
-        }
-      }
+      // Revert offers globally: restore price from originalPrice for any item that has it.
+      const updatedMenu = { ...(menu || {}) };
+      Object.keys(updatedMenu).forEach((cat) => {
+        updatedMenu[cat] = (updatedMenu[cat] || []).map((item) => {
+          if (item && item.originalPrice !== undefined && item.originalPrice !== null) {
+            const { originalPrice, ...rest } = item;
+            return { ...rest, price: originalPrice };
+          }
+          return item;
+        });
+      });
       await saveMenu(updatedMenu);
       setMenu(updatedMenu);
       setToast("Offers reverted");

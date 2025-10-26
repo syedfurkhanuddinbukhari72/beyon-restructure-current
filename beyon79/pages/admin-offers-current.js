@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
-import { saveOffersRules, saveMenu } from "../src/localDataService";
+import { saveOffersRules, saveMenu, getMenu, getOffersRules } from "../src/localDataService";
 
 export default function CurrentOffersPage() {
   const router = useRouter();
@@ -22,15 +22,15 @@ export default function CurrentOffersPage() {
 
   const fetchMenu = async () => {
     try {
-      const data = (await import("../data/menuData.json")).default;
-      setMenu(data);
+      const data = await getMenu();
+      setMenu(data || {});
     } catch (e) {
       console.warn("Failed to load menu data:", e);
     }
   };
   const fetchRules = async () => {
     try {
-      const offersData = (await import("../data/offers.json")).default;
+      const offersData = await getOffersRules();
       setRules(offersData || []);
     } catch (e) {
       console.warn("Failed to load offers rules:", e);
@@ -49,6 +49,76 @@ export default function CurrentOffersPage() {
     fetchMenu();
     fetchRules();
     fetchHistory();
+  }, []);
+
+  // Add data synchronization listeners
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[admin-offers-current] Tab became visible, reloading data');
+        fetchMenu();
+        fetchRules();
+      }
+    };
+
+    const handleBroadcast = (event) => {
+      const type = event.detail?.type;
+      if (type === "menu") fetchMenu();
+      if (type === "offers") fetchRules();
+    };
+
+    const handleStorage = (event) => {
+      if (event.key === "localData:menu") fetchMenu();
+      if (event.key === "localData:offers") fetchRules();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("localData:update", handleBroadcast);
+    window.addEventListener("storage", handleStorage);
+
+    // BroadcastChannel for cross-tab communication
+    let bc;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('localData');
+        bc.onmessage = (msg) => {
+          try {
+            const type = msg?.data?.type;
+            if (type === 'menu') fetchMenu();
+            if (type === 'offers') fetchRules();
+          } catch (e) { /* noop */ }
+        };
+      }
+    } catch (e) { /* ignore */ }
+
+    // Polling fallback
+    let lastMenuCheck = Date.now();
+    let lastOffersCheck = Date.now();
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const menuTimestamp = localStorage.getItem('localData:menu');
+        const offersTimestamp = localStorage.getItem('localData:offers');
+        if (menuTimestamp && Number(menuTimestamp) > lastMenuCheck) {
+          lastMenuCheck = Date.now();
+          fetchMenu();
+        }
+        if (offersTimestamp && Number(offersTimestamp) > lastOffersCheck) {
+          lastOffersCheck = Date.now();
+          fetchRules();
+        }
+      } catch (e) { /* ignore */ }
+    }, 2000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("localData:update", handleBroadcast);
+      window.removeEventListener("storage", handleStorage);
+      clearInterval(pollInterval);
+      try { bc && bc.close(); } catch (e) {}
+    };
   }, []);
 
   const categoryList = useMemo(() => {

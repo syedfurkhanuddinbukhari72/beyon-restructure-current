@@ -69,17 +69,62 @@ export default function CartPage() {
     };
   }, []);
 
-  // Load offers rules from local data
+  // Load offers rules from local data service
   useEffect(() => {
     const loadRules = async () => {
       try {
-        const offersData = (await import("../data/offers.json")).default;
+        const { getOffersRules } = await import("../src/localDataService");
+        const offersData = await getOffersRules();
         setRules((offersData || []).filter(r => r && r.active !== false));
       } catch (e) {
         console.warn("Failed to load offers rules:", e);
       }
     };
     loadRules();
+  }, []);
+
+  // Listen for offers updates
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleBroadcast = (event) => {
+      const type = event.detail?.type;
+      if (type === "offers") {
+        const loadRules = async () => {
+          try {
+            const { getOffersRules } = await import("../src/localDataService");
+            const offersData = await getOffersRules();
+            setRules((offersData || []).filter(r => r && r.active !== false));
+          } catch (e) {
+            console.warn("Failed to reload offers rules:", e);
+          }
+        };
+        loadRules();
+      }
+    };
+
+    const handleStorage = (event) => {
+      if (event.key === "localData:offers") {
+        const loadRules = async () => {
+          try {
+            const { getOffersRules } = await import("../src/localDataService");
+            const offersData = await getOffersRules();
+            setRules((offersData || []).filter(r => r && r.active !== false));
+          } catch (e) {
+            console.warn("Failed to reload offers rules:", e);
+          }
+        };
+        loadRules();
+      }
+    };
+
+    window.addEventListener("localData:update", handleBroadcast);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener("localData:update", handleBroadcast);
+      window.removeEventListener("storage", handleStorage);
+    };
   }, []);
 
   // Save cart to localStorage whenever it changes (after initial load)

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo, useRef, useCallback, useTransition } from "react";
+import ConfirmModal from "../components/ConfirmModal";
 import { useRouter } from "next/router";
 import * as localData from "@/src/localDataService";
 import menuDataJSON from "../data/menuData.json";
@@ -308,17 +309,21 @@ export default function AdminPage() {
   const router = useRouter();
   const [orders, setOrders] = useState([]);
   const [localOrders, setLocalOrders] = useState([]);
-  const [tab, setTab] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('admin:lastTab');
-        if (stored && TABS.includes(stored)) return stored;
-      } catch (e) {
-        console.warn('AdminPage: could not read admin:lastTab', e);
-      }
+  // Stable ref used to register/unregister the window message listener
+  const messageListenerRef = useRef(null);
+  // Initialize to a stable default to avoid SSR/client hydration mismatch.
+  // Read persisted tab from localStorage only after mount.
+  const [tab, setTab] = useState("Active");
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem('admin:lastTab');
+      if (stored && TABS.includes(stored)) setTab(stored);
+    } catch (e) {
+      console.warn('AdminPage: could not read admin:lastTab', e);
     }
-    return "Active";
-  });
+  }, []);
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef(null);
@@ -355,6 +360,8 @@ export default function AdminPage() {
   const [removeForm, setRemoveForm] = useState({ category: "", productName: "" });
   // Add/Remove menu toggle
   const [showAddRemoveMenu, setShowAddRemoveMenu] = useState(false);
+  // Confirm modal state used across remove/delete flows
+  const [confirmState, setConfirmState] = useState({ open: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', busy: false, onConfirm: null });
   const [offerForm, setOfferForm] = useState({
     scope: 'all', // 'all' | 'category' | 'item'
     category: '',
@@ -391,6 +398,208 @@ export default function AdminPage() {
       }
     }
   }, [tab]);
+
+  
+
+  const handleMessage = useCallback((e) => {
+    try {
+      const d = e.data;
+      if (!d || d.type !== 'beyon:app-shortcut') return;
+      const payload = d.payload || {};
+      console.log('[admin-unified] handleMessage received payload', payload);
+      const action = payload.action;
+      if (!action) return;
+      switch (action) {
+        case 'switch_to_active_tab':
+          console.log('[admin-unified] switching to Active');
+          handleTabChange('Active');
+          setToast('Switched to Active tab');
+          break;
+        case 'switch_to_ready_tab':
+          console.log('[admin-unified] switching to Ready');
+          handleTabChange('Ready');
+          setToast('Switched to Ready tab');
+          break;
+        case 'switch_to_paid_tab':
+          console.log('[admin-unified] switching to Paid');
+          handleTabChange('Paid');
+          setToast('Switched to Paid tab');
+          break;
+        case 'switch_to_archive_tab':
+          console.log('[admin-unified] switching to Archived');
+          handleTabChange('Archived');
+          setToast('Switched to Archived tab');
+          break;
+        case 'local_mode':
+          console.log('[admin-unified] switching to Local');
+          handleTabChange('Local');
+          setToast('Switched to Local tab');
+          break;
+        case 'open_manual_orders':
+          console.log('[admin-unified] opening manual orders');
+          try {
+            let navigated = false;
+            router.push('/manual-orders').then((res) => {
+              navigated = true;
+              console.log('[admin-unified] router.push /manual-orders resolved', res, window.location.href);
+            }).catch((err) => console.warn('[admin-unified] router.push /manual-orders failed', err));
+            // fallback: if router.push hasn't resolved in 200ms, force navigation
+            setTimeout(() => {
+              if (!navigated) {
+                console.warn('[admin-unified] router.push /manual-orders did not resolve quickly — falling back to location.href');
+                try { window.location.href = '/manual-orders'; } catch (e) { console.warn('fallback location.href failed', e); }
+              }
+            }, 200);
+          } catch (err) { console.warn('[admin-unified] router.push threw', err); }
+          setToast('Opened Manual Orders');
+          break;
+        case 'open_manual_order_complete':
+          console.log('[admin-unified] opening manual order complete');
+          try {
+            let navigated = false;
+            router.push('/manual-order-complete').then((res) => {
+              navigated = true;
+              console.log('[admin-unified] router.push /manual-order-complete resolved', res, window.location.href);
+            }).catch((err) => console.warn('[admin-unified] router.push /manual-order-complete failed', err));
+            // fallback: if router.push hasn't resolved in 200ms, force navigation
+            setTimeout(() => {
+              if (!navigated) {
+                console.warn('[admin-unified] router.push /manual-order-complete did not resolve quickly — falling back to location.href');
+                try { window.location.href = '/manual-order-complete'; } catch (e) { console.warn('fallback location.href failed', e); }
+              }
+            }, 200);
+          } catch (err) { console.warn('[admin-unified] router.push threw', err); }
+          setToast('Opened Manual Order Complete');
+          break;
+        case 'open_bill':
+          console.log('[admin-unified] opening bill');
+          try {
+            let navigated = false;
+            router.push('/bill').then((res) => {
+              navigated = true;
+              console.log('[admin-unified] router.push /bill resolved', res, window.location.href);
+            }).catch((err) => console.warn('[admin-unified] router.push /bill failed', err));
+            setTimeout(() => {
+              if (!navigated) {
+                console.warn('[admin-unified] router.push /bill did not resolve quickly — falling back to location.href');
+                try { window.location.href = '/bill'; } catch (e) { console.warn('fallback location.href failed', e); }
+              }
+            }, 200);
+          } catch (err) { console.warn('[admin-unified] router.push threw', err); }
+          setToast('Opened Bill');
+          break;
+        case 'open_cart':
+          console.log('[admin-unified] opening cart');
+          try {
+            // If we're already on the manual-order-complete page, prefer
+            // opening the in-page cart sheet (so Shift+C opens the sheet)
+            // instead of navigating to the /cart page. This keeps UX
+            // consistent when using the manual order flow.
+            const path = (typeof window !== 'undefined' && window.location && window.location.pathname) || '';
+            if (path.indexOf('/manual-order-complete') !== -1) {
+              try {
+                // mark the time we attempted to open cart from admin page
+                try { window.__admin_lastOpenCart = Date.now(); } catch (e) {}
+                window.postMessage({ type: 'beyon:app-shortcut', payload: { action: 'open_cart' } }, '*');
+                console.log('[admin-unified] posted beyon:app-shortcut open_cart to current page', { ts: Date.now(), path });
+              } catch (e) {
+                console.warn('[admin-unified] postMessage open_cart failed', e);
+              }
+              // For dev debugging: also set a short-lived flag so receiver can check
+              try { window.__admin_openCartPostedFlag = Date.now(); setTimeout(() => { try { window.__admin_openCartPostedFlag = null; } catch (e) {} }, 2000); } catch (e) {}
+              
+            } else {
+              // Navigate to manual-order-complete and ask it to auto-open the cart
+              let navigated = false;
+              router.push('/manual-order-complete?openCart=1').then((res) => {
+                navigated = true;
+                console.log('[admin-unified] router.push /manual-order-complete?openCart=1 resolved', res, window.location.href);
+              }).catch((err) => console.warn('[admin-unified] router.push /manual-order-complete failed', err));
+              setTimeout(() => {
+                if (!navigated) {
+                  console.warn('[admin-unified] router.push did not resolve quickly — falling back to location.href');
+                  try { window.location.href = '/manual-order-complete?openCart=1'; } catch (e) { console.warn('fallback location.href failed', e); }
+                }
+              }, 200);
+            }
+          } catch (err) { console.warn('[admin-unified] router.push threw', err); }
+          setToast('Opened Cart');
+          break;
+        case 'go_back':
+          console.log('[admin-unified] go_back');
+          try {
+            router.back();
+          } catch (err) {
+            console.warn('[admin-unified] router.back failed', err);
+            // fallback to home or admin-login
+            router.push('/');
+          }
+          break;
+        case 'print_current':
+          console.log('[admin-unified] print_current received');
+          try {
+            // Prefer expandedOrderId (selected), else first visible filtered order
+            const targetId = expandedOrderId || (filteredOrders && filteredOrders[0] && filteredOrders[0]._id);
+            const orderToPrint = (filteredOrders || []).find((o) => o._id === targetId) || (filteredOrders || [])[0];
+            if (!orderToPrint) {
+              setToast('No order available to print');
+              break;
+            }
+            try {
+              if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.printReceipt === 'function') {
+                window.electronAPI.printReceipt(orderToPrint).then((res) => {
+                  if (!res || !res.success) console.warn('Print failed', res && res.failureReason);
+                }).catch((err) => console.warn('printReceipt failed', err));
+              } else {
+                const q = encodeURIComponent(JSON.stringify(orderToPrint || {}));
+                window.open(`/print-receipt?order=${q}`, '_blank');
+              }
+            } catch (e) {
+              console.error('Print action failed', e);
+              setToast('Print failed');
+            }
+            setToast('Printing...');
+          } catch (e) {
+            console.warn('[admin-unified] print_current error', e);
+          }
+          break;
+        // cancel_order is an action that affects selected order — leave to UI
+        default: break;
+      }
+    } catch (err) { console.warn('[admin-unified] handleMessage error', err); }
+  }, [router, setToast]);
+
+  // Global keyboard shortcut handler (postMessage)
+  useEffect(() => {
+    if (messageListenerRef.current) {
+      window.removeEventListener('message', messageListenerRef.current);
+    }
+    messageListenerRef.current = handleMessage;
+    console.log('[admin-unified] adding message listener for beyon:app-shortcut');
+    window.addEventListener('message', messageListenerRef.current);
+
+    // If a shortcut arrived just before this component mounted, shortcutHandler
+    // stores the last action in `window.__beyon_shortcut_handler._last`.
+    // Replay it if it is recent so the page doesn't miss an event fired during
+    // navigation/hydration.
+    try {
+      const last = window.__beyon_shortcut_handler && window.__beyon_shortcut_handler._last;
+      if (last && last.action && Date.now() - (last.ts || 0) < 500) {
+        // replay
+        console.log('[admin-unified] replaying recent shortcut', last);
+        handleMessage({ data: { type: 'beyon:app-shortcut', payload: { action: last.action } } });
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    return () => {
+      console.log('[admin-unified] removing message listener for beyon:app-shortcut');
+      if (messageListenerRef.current) {
+        window.removeEventListener('message', messageListenerRef.current);
+      }
+    };
+  }, [handleMessage]);
 
   // Initialize local storage with seed data on first run
   useEffect(() => {
@@ -586,7 +795,24 @@ export default function AdminPage() {
       setToast("Select an item to remove.");
       return;
     }
+    // show confirm modal
+    setConfirmState({
+      open: true,
+      title: "Remove item",
+      message: `Remove '${productName}' from category '${category}'? This action cannot be undone.`,
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      busy: false,
+      onConfirm: async () => {
+        await doRemoveItem(category, productName);
+      },
+    });
+  };
+
+  // Concrete action implementations invoked by confirm modal
+  const doRemoveItem = async (category, productName) => {
     try {
+      setConfirmState((s) => ({ ...s, busy: true }));
       setRemoveBusy(true);
       await localData.removeProduct(category, productName);
       const data = await localData.getMenu();
@@ -607,6 +833,7 @@ export default function AdminPage() {
       setToast(`Failed to remove item: ${e.message || e}`);
     } finally {
       setRemoveBusy(false);
+      setConfirmState({ open: false });
     }
   };
 
@@ -882,7 +1109,16 @@ export default function AdminPage() {
 
   const handleEditOffer = (category, product) => {
     setProductMenuKey(null);
-    router.push({ pathname: '/admin-offers', query: { highlight: product.name, category } });
+    try {
+      const prefill = {
+        discount: { productName: product.name, category },
+        bundle: { baseName: product.name }
+      };
+      router.push({ pathname: '/admin-offers', query: { prefill: encodeURIComponent(JSON.stringify(prefill)) } });
+    } catch (e) {
+      // fallback to simple highlighting
+      router.push({ pathname: '/admin-offers', query: { highlight: product.name, category } });
+    }
   };
 
   const handleRemoveOffer = async (category, product) => {
@@ -892,10 +1128,25 @@ export default function AdminPage() {
       setToast('No per-item offer detected on this product.');
       return;
     }
+    setConfirmState({
+      open: true,
+      title: 'Remove Offer',
+      message: `Remove per-item offer for '${product.name}'? This will restore the original price.`,
+      confirmText: 'Remove Offer',
+      cancelText: 'Cancel',
+      busy: false,
+      onConfirm: async () => {
+        await doRemoveOffer(category, product);
+      },
+    });
+  };
+
+  const doRemoveOffer = async (category, product) => {
     const key = JSON.stringify({ c: category, n: product.name });
     if (productBusy[key]) return;
-    setProductBusy((prev) => ({ ...prev, [key]: true }));
     try {
+      setConfirmState((s) => ({ ...s, busy: true }));
+      setProductBusy((prev) => ({ ...prev, [key]: true }));
       const menuSnapshot = await localData.getMenu();
       const list = Array.isArray(menuSnapshot?.[category]) ? [...menuSnapshot[category]] : [];
       const index = list.findIndex((item) => item?.name === product.name);
@@ -919,19 +1170,32 @@ export default function AdminPage() {
       setToast(e?.message ? `Failed to remove offer: ${e.message}` : 'Failed to remove offer.');
     } finally {
       setProductBusy((prev) => ({ ...prev, [key]: false }));
+      setConfirmState({ open: false });
     }
   };
 
   const handleDeleteProduct = async (category, product) => {
     setProductMenuKey(null);
-    if (typeof window !== 'undefined') {
-      const confirmed = window.confirm(`Delete ${product.name}? This cannot be undone.`);
-      if (!confirmed) return;
-    }
+    // show confirm modal for delete
+    setConfirmState({
+      open: true,
+      title: 'Delete item',
+      message: `Delete '${product.name}' from '${category}'? This WILL remove the item permanently.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      busy: false,
+      onConfirm: async () => {
+        await doDeleteProduct(category, product);
+      },
+    });
+  };
+
+  const doDeleteProduct = async (category, product) => {
     const key = JSON.stringify({ c: category, n: product.name });
     if (productBusy[key]) return;
-    setProductBusy((prev) => ({ ...prev, [key]: true }));
     try {
+      setConfirmState((s) => ({ ...s, busy: true }));
+      setProductBusy((prev) => ({ ...prev, [key]: true }));
       const menuSnapshot = await localData.getMenu();
       const list = Array.isArray(menuSnapshot?.[category]) ? [...menuSnapshot[category]] : [];
       const filtered = list.filter((item) => item?.name !== product.name);
@@ -944,6 +1208,7 @@ export default function AdminPage() {
       setToast(e?.message ? `Failed to delete item: ${e.message}` : 'Failed to delete item.');
     } finally {
       setProductBusy((prev) => ({ ...prev, [key]: false }));
+      setConfirmState({ open: false });
     }
   };
 
@@ -965,7 +1230,6 @@ export default function AdminPage() {
       fetchAndFilterOrders();
     }, 1000);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, fetchAndFilterOrders]);
 
   // ✅ Fetch Menu on Products tab
@@ -1094,6 +1358,13 @@ export default function AdminPage() {
         ];
         break;
     }
+    try {
+      if (typeof window !== 'undefined') {
+        window.__beyon_lastFiltered = { tab, count: (result || []).length };
+      }
+    } catch (e) {
+      // ignore
+    }
     return result.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [tab, orders, localOrders]);
 
@@ -1106,16 +1377,24 @@ export default function AdminPage() {
   }, [router?.query?.tab]);
 
   // ✅ Tab Change Handler (Updates URL)
-  const handleTabChange = (newTab) => {
-    if (newTab !== tab) {
-      setTab(newTab);
-      router.push(
-        { query: { ...router.query, tab: newTab } },
-        undefined,
-        { shallow: true }
-      );
-    }
-  };
+  const handleTabChange = useCallback((newTab) => {
+    console.log('[admin-unified] handleTabChange called ->', newTab);
+    // Use functional state update to avoid capturing stale `tab` and to make
+    // the callback stable (so other hooks depending on it do not re-run).
+    setTab((prev) => {
+      if (prev === newTab) return prev;
+      try {
+        router.push(
+          { query: { ...router.query, tab: newTab } },
+          undefined,
+          { shallow: true }
+        );
+      } catch (e) {
+        // ignore router errors
+      }
+      return newTab;
+    });
+  }, [router]);
 
   // ✅ Expand/Collapse an order row to show full items
   const toggleExpand = (id) => {
@@ -1641,6 +1920,23 @@ export default function AdminPage() {
         )
       )}
       </div>
+      {/* Confirm modal (global) */}
+      <ConfirmModal
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText={confirmState.confirmText}
+        cancelText={confirmState.cancelText}
+        busy={confirmState.busy}
+        onCancel={() => setConfirmState({ open: false })}
+        onConfirm={async () => {
+          try {
+            if (typeof confirmState.onConfirm === 'function') await confirmState.onConfirm();
+          } catch (e) {
+            console.error('Confirm action failed', e);
+          }
+        }}
+      />
 
       {/* Add / Remove Items Modal */}
       {/* Small centered choice popup for Add vs Remove */}

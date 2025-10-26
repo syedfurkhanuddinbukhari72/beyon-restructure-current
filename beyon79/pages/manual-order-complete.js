@@ -134,6 +134,13 @@ function OfferBadge({ item, offersJson, menuData, onExpand, isExpanded, isTall }
 export default function ManualOrderPage() {
   const [menuData, setMenuData] = useState(menuSeed);
   const [offers, setOffers] = useState(offersSeed);
+  const [offersLoaded, setOffersLoaded] = useState(false);
+  const [reloadToast, setReloadToast] = useState(null); // transient UI toast when data reloads
+  const offersFirstLoadRef = useRef(true);
+  const menuFirstLoadRef = useRef(true);
+  const reloadToastTimeout = useRef(null);
+  const lastMenuHashRef = useRef('');
+  const lastOffersHashRef = useRef('');
   // Core UI state hooks stay grouped upfront to avoid temporal dead zones in effects
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [cart, setCart] = useState([]);
@@ -145,6 +152,7 @@ export default function ManualOrderPage() {
   const [searchMode, setSearchMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
+  const [focusedItemIdx, setFocusedItemIdx] = useState(null);
   const [billOpen, setBillOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [paperFormat, setPaperFormat] = useState('auto');
@@ -153,11 +161,34 @@ export default function ManualOrderPage() {
   const [isPortrait, setIsPortrait] = useState(true);
   const [latestSavedOrder, setLatestSavedOrder] = useState(null);
   const [billSource, setBillSource] = useState('cart'); // 'cart' or 'latest'
+  const [dataVersion, setDataVersion] = useState(0); // Force re-render when data changes
+  // Selected bill data (either current cart or latest saved order)
+  const selectedBillData = useMemo(() => {
+    console.log('[selectedBillData] Recalculating bill. Cart items:', cart?.length || 0, 'dataVersion:', dataVersion);
+    if (billSource === 'latest' && latestSavedOrder && Array.isArray(latestSavedOrder.fullCart)) {
+      return computeBillData(latestSavedOrder.fullCart || []);
+    }
+    const billData = computeBillData(cart || []);
+    console.log('[selectedBillData] Bill total:', billData.total, 'lines:', billData.lines?.length || 0);
+    return billData;
+  }, [billSource, latestSavedOrder, cart, menuData, offers, dataVersion]);
   const mountedRef = useRef(true);
   const billRef = useRef(null);
   const categoryRefs = useRef({});
+  const searchInputRef = useRef(null);
   const touchStart = useRef(null);
   const router = useRouter();
+
+  // Helper: whether the user is typing in an input-like element
+  function isTypingInInput() {
+    if (typeof document === 'undefined') return false;
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return true;
+    if (el.isContentEditable) return true;
+    return false;
+  }
 
   useEffect(() => {
     return () => {
@@ -165,40 +196,269 @@ export default function ManualOrderPage() {
     };
   }, []);
 
+  // Keyboard navigation: Shift+C to open cart, arrow keys to navigate cards,
+  // Space to cycle category chips. Avoid when typing in inputs.
+  useEffect(() => {
+    const handleKey = (ev) => {
+      try {
+        console.log('[manual-order-complete] Key event:', ev.key, 'shift:', ev.shiftKey, 'ctrl:', ev.ctrlKey, 'alt:', ev.altKey, 'meta:', ev.metaKey);
+        if (!ev) return;
+        // Ignore combos with ctrl/meta/alt
+        if (ev.ctrlKey || ev.metaKey || ev.altKey) {
+          console.log('[manual-order-complete] Ignoring due to modifier keys');
+          return;
+        }
+        // Allow Shift+C to open cart even when focus is in an input
+        const keyLower = (ev.key || '').toLowerCase();
+        const isTyping = isTypingInInput();
+        console.log('[manual-order-complete] Key:', keyLower, 'isTyping:', isTyping, 'shiftKey:', ev.shiftKey);
+        if (!(ev.shiftKey && keyLower === 'c') && isTyping) {
+          console.log('[manual-order-complete] Ignoring because typing in input and not Shift+C');
+          return;
+        }
+
+        // Shift+C -> open cart sheet
+        if (ev.shiftKey && (ev.key || '').toLowerCase() === 'c') {
+          console.log('[manual-order-complete] Shift+C detected, opening cart sheet');
+          ev.preventDefault && ev.preventDefault();
+          setCartSheetOpen(true);
+          return;
+        }
+
+        // Shift+S -> open search and focus input
+        if (ev.shiftKey && (ev.key || '').toLowerCase() === 's') {
+          ev.preventDefault && ev.preventDefault();
+          setSearchMode(true);
+          // small delay to ensure input is rendered
+          setTimeout(() => {
+            try { searchInputRef.current && searchInputRef.current.focus(); } catch (e) {}
+          }, 50);
+          return;
+        }
+
+        // Escape -> exit search mode (when active)
+        if ((ev.key || '').toLowerCase() === 'escape') {
+          if (searchMode) {
+            ev.preventDefault && ev.preventDefault();
+            setSearchMode(false);
+            setSearchQuery('');
+          }
+          return;
+        }
+
+        // Compute flattened list of visible items (respecting category and search)
+        let visibleItems = [];
+        if (searchMode && searchQuery) {
+          // Search all items across categories
+          visibleItems = Object.values(menuData).flat().filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
+        } else {
+          // Respect selected category
+          visibleItems = Object.entries(menuData)
+            .filter(([category]) => selectedCategory === 'All' || selectedCategory === category)
+            .flatMap(([category, items]) => items);
+        }
+        visibleItems = visibleItems || [];
+        if (!visibleItems || visibleItems.length === 0) return;
+
+        const key = (ev.key || '').toLowerCase();
+
+        // Navigation: arrow keys
+        if (key === 'arrowright' || key === 'arrowleft' || key === 'arrowup' || key === 'arrowdown') {
+          ev.preventDefault && ev.preventDefault();
+          const cardsPerRow = isPortrait ? 2 : 4;
+          let idx = typeof focusedItemIdx === 'number' ? focusedItemIdx : 0;
+          if (key === 'arrowright') {
+            idx = Math.min(visibleItems.length - 1, (idx == null ? 0 : idx) + 1);
+          } else if (key === 'arrowleft') {
+            idx = Math.max(0, (idx == null ? 0 : idx) - 1);
+          } else if (key === 'arrowdown') {
+            idx = Math.min(visibleItems.length - 1, (idx == null ? 0 : idx) + cardsPerRow);
+          } else if (key === 'arrowup') {
+            idx = Math.max(0, (idx == null ? 0 : idx) - cardsPerRow);
+          }
+          setFocusedItemIdx(idx);
+          // focus the corresponding card DOM node
+          requestAnimationFrame(() => {
+            try {
+              const cards = Array.from(document.querySelectorAll('.manual-order-card'));
+              const node = cards[idx];
+              if (node && typeof node.scrollIntoView === 'function') {
+                node.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                // apply focus for accessibility
+                node.focus && node.focus();
+              }
+            } catch (e) {}
+          });
+          return;
+        }
+
+        // Space: move between category chips (cycle forward)
+        if (key === ' ' || key === 'spacebar') {
+          ev.preventDefault && ev.preventDefault();
+          const cats = categories || [];
+          if (!cats || cats.length === 0) return;
+          const current = cats.indexOf(selectedCategory);
+          const next = (current + 1) % cats.length;
+          setSelectedCategory(cats[next]);
+          // move focus to the category button
+          requestAnimationFrame(() => {
+            try {
+              const el = categoryRefs.current && categoryRefs.current[cats[next]];
+              el && el.scrollIntoView && el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+              el && el.focus && el.focus();
+            } catch (e) {}
+          });
+          return;
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    window.addEventListener('keydown', handleKey, { passive: false });
+    return () => window.removeEventListener('keydown', handleKey, { passive: false });
+  }, [menuData, selectedCategory, searchMode, searchQuery, focusedItemIdx, isPortrait]);
+
   const loadMenuData = useCallback(async () => {
     try {
       const storedMenu = await getMenu();
       if (!mountedRef.current) return;
       if (storedMenu && Object.keys(storedMenu).length > 0) {
         setMenuData(storedMenu);
+        setDataVersion(v => v + 1); // Force re-render
+        // show toast only on subsequent reloads (not initial hydrate)
+        if (!menuFirstLoadRef.current) showReloadToast('Menu updated — reloaded');
+        menuFirstLoadRef.current = false;
       } else {
         setMenuData(menuSeed);
+        if (!menuFirstLoadRef.current) showReloadToast('Menu updated — reloaded');
+        menuFirstLoadRef.current = false;
       }
     } catch (err) {
       console.warn("Failed to load menu from local store", err);
       if (mountedRef.current) setMenuData(menuSeed);
+      if (!menuFirstLoadRef.current) showReloadToast('Menu updated — reloaded');
+      menuFirstLoadRef.current = false;
     }
   }, []);
 
   const loadOffersData = useCallback(async () => {
     try {
-      const storedOffers = await getOffersRules();
+      // Fetch offers from offers.json dynamically
+      const response = await fetch('/data/offers.json');
+      if (!response.ok) throw new Error('Failed to fetch offers.json');
+      const fetchedOffers = await response.json();
       if (!mountedRef.current) return;
-      if (Array.isArray(storedOffers)) {
-        setOffers(storedOffers);
+      if (Array.isArray(fetchedOffers)) {
+        setOffers(fetchedOffers);
+        setDataVersion(v => v + 1); // Force re-render
+        setOffersLoaded(true);
+        if (!offersFirstLoadRef.current) showReloadToast('Offers updated — cart recalculated');
+        offersFirstLoadRef.current = false;
       } else {
         setOffers(offersSeed);
+        setOffersLoaded(true);
+        if (!offersFirstLoadRef.current) showReloadToast('Offers updated — cart recalculated');
+        offersFirstLoadRef.current = false;
       }
     } catch (err) {
-      console.warn("Failed to load offers from local store", err);
-      if (mountedRef.current) setOffers(offersSeed);
+      console.warn("Failed to load offers from offers.json", err);
+      // Fallback to local storage or seed
+      try {
+        const storedOffers = await getOffersRules();
+        if (Array.isArray(storedOffers)) {
+          setOffers(storedOffers);
+        } else {
+          setOffers(offersSeed);
+        }
+      } catch (fallbackErr) {
+        console.warn("Fallback failed", fallbackErr);
+        setOffers(offersSeed);
+      }
+      setOffersLoaded(true);
+      if (!offersFirstLoadRef.current) showReloadToast('Offers updated — cart recalculated');
+      offersFirstLoadRef.current = false;
     }
   }, []);
+
+  // Helper to show a small transient reload toast. Clears any previous toast timeout.
+  function showReloadToast(msg, ms = 2800) {
+    try {
+      setReloadToast(msg);
+      if (reloadToastTimeout.current) {
+        clearTimeout(reloadToastTimeout.current);
+        reloadToastTimeout.current = null;
+      }
+      reloadToastTimeout.current = setTimeout(() => {
+        try { setReloadToast(null); } catch (e) { /* noop */ }
+        reloadToastTimeout.current = null;
+      }, ms);
+    } catch (e) {
+      // noop
+    }
+  }
 
   useEffect(() => {
     loadMenuData();
     loadOffersData();
   }, [loadMenuData, loadOffersData]);
+
+  // Global keyboard shortcut handler (postMessage)
+  useEffect(() => {
+    const handleMessage = (e) => {
+      try {
+        const d = e.data;
+        if (!d || d.type !== 'beyon:app-shortcut') return;
+        const payload = d.payload || {};
+        try { console.log('[manual-order-complete] received beyon:app-shortcut', { payload, ts: Date.now(), adminLast: window.__admin_lastOpenCart || null, adminFlag: window.__admin_openCartPostedFlag || null }); } catch (e) {}
+        const action = payload.action;
+        if (!action) return;
+        switch (action) {
+          case 'open_bill':
+            console.log('[manual-order-complete] open_bill -> opening bill');
+            router.push('/bill');
+            break;
+          case 'open_cart':
+            console.log('[manual-order-complete] open_cart -> opening cart sheet');
+            setCartSheetOpen(true);
+            break;
+          case 'print_current':
+            console.log('[manual-order-complete] print_current -> triggering print');
+            // Trigger print for the current bill
+            if (selectedBillData && selectedBillData.lines && selectedBillData.lines.length > 0) {
+              // Simulate print action - in a real app, this would call a print function
+              console.log('Printing current bill data:', selectedBillData);
+            // For now, just open the bill page with print=true to trigger print
+            router.push('/bill?print=true');
+            }
+            break;
+          default:
+            break;
+        }
+      } catch (err) {
+        console.warn('[manual-order-complete] handleMessage error', err);
+      }
+    };
+    // If the page was opened with ?openCart=1, auto-open the cart sheet.
+    try {
+      const qs = (typeof window !== 'undefined' && window.location && window.location.search) || '';
+      if (qs && qs.indexOf('openCart=1') !== -1) {
+        console.log('[manual-order-complete] query openCart=1 detected, opening cart sheet');
+        setCartSheetOpen(true);
+      }
+    } catch (e) {}
+    window.addEventListener('message', handleMessage);
+    // dev helper: expose a method to simulate an incoming open_cart and log the flow
+    try {
+      window.__manual_dev_helpers = window.__manual_dev_helpers || {};
+      window.__manual_dev_helpers.simulateOpenCart = function () {
+        try {
+          console.log('[manual-order-complete] simulateOpenCart() posting test beyon:app-shortcut');
+          window.postMessage({ type: 'beyon:app-shortcut', payload: { action: 'open_cart' } }, '*');
+        } catch (e) { console.warn('simulateOpenCart failed', e); }
+      };
+    } catch (e) {}
+    return () => window.removeEventListener('message', handleMessage);
+  }, [router, selectedBillData]);
 
   useEffect(() => {
     const target = categoryRefs.current?.[selectedCategory];
@@ -230,14 +490,92 @@ export default function ManualOrderPage() {
       loadOffersData();
     };
 
+    // Handle visibility change (when user switches back to this tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[manual-order-complete] Tab became visible, reloading data');
+        loadMenuData();
+        loadOffersData();
+      }
+    };
+
     window.addEventListener("localData:update", handleBroadcast);
     window.addEventListener("storage", handleStorage);
     window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // BroadcastChannel fallback for Electron / multi-window reliability
+    // (some environments don't reliably deliver storage events across renderer processes)
+    let bc;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('localData');
+        bc.onmessage = (msg) => {
+          try {
+            const type = msg?.data?.type;
+            console.log('[manual-order-complete] BroadcastChannel message received:', type);
+            if (type === 'menu') loadMenuData();
+            if (type === 'offers') loadOffersData();
+          } catch (e) {
+            console.warn('[manual-order-complete] BroadcastChannel error:', e);
+          }
+        };
+      }
+    } catch (e) {
+      console.warn('[manual-order-complete] BroadcastChannel not available:', e);
+    }
+
+    // Initialize refs with current data if not set
+    if (!lastMenuHashRef.current) {
+      lastMenuHashRef.current = JSON.stringify(menuData);
+    }
+    if (!lastOffersHashRef.current) {
+      lastOffersHashRef.current = JSON.stringify(offers);
+    }
+
+    // Polling mechanism: check for actual data changes every 1 second when page is visible
+    const pollInterval = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
+      
+      try {
+        // Directly check IndexedDB for data changes
+        const currentMenu = await getMenu();
+        const currentOffers = await getOffersRules();
+        
+        const currentMenuHash = JSON.stringify(currentMenu);
+        const currentOffersHash = JSON.stringify(currentOffers);
+        
+        if (currentMenuHash !== lastMenuHashRef.current) {
+          console.log('[manual-order-complete] Menu data changed (polling detected), reloading');
+          lastMenuHashRef.current = currentMenuHash;
+          if (mountedRef.current) {
+            setMenuData(currentMenu || menuSeed);
+            setDataVersion(v => v + 1); // Force re-render
+            showReloadToast('Menu updated - prices synced');
+          }
+        }
+        
+        if (currentOffersHash !== lastOffersHashRef.current) {
+          console.log('[manual-order-complete] Offers data changed (polling detected), reloading');
+          lastOffersHashRef.current = currentOffersHash;
+          if (mountedRef.current) {
+            setOffers(Array.isArray(currentOffers) ? currentOffers : offersSeed);
+            setDataVersion(v => v + 1); // Force re-render
+            showReloadToast('Offers updated - cart synced');
+          }
+        }
+      } catch (e) {
+        console.warn('[manual-order-complete] Polling error:', e);
+      }
+    }, 1000);
 
     return () => {
       window.removeEventListener("localData:update", handleBroadcast);
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearInterval(pollInterval);
+      try { bc && bc.close(); } catch (e) {}
     };
   }, [loadMenuData, loadOffersData]);
   // Utility: Get set of item names with active offers (discount/category/item or bundle/combo)
@@ -278,6 +616,16 @@ export default function ManualOrderPage() {
   function getRowIndex(idx, cardsPerRow = 2) {
     return Math.floor(idx / cardsPerRow);
   }
+
+  const filteredItems = useMemo(() => {
+    if (searchMode && searchQuery) {
+      return Object.values(menuData).flat().filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    } else {
+      return Object.entries(menuData)
+        .filter(([category]) => selectedCategory === "All" || selectedCategory === category)
+        .flatMap(([category, items]) => items);
+    }
+  }, [menuData, selectedCategory, searchMode, searchQuery]);
 
   useEffect(() => {
     function handleResize() {
@@ -330,8 +678,9 @@ export default function ManualOrderPage() {
     return sum;
   }, [cart, menuData, offers]);
 
-  // Load latest saved order from localStorage on mount
+  // Load latest saved order from localStorage — hydrate cart only after offers have loaded
   useEffect(() => {
+    if (!offersLoaded) return; // wait for offers before syncing rewards
     if (typeof window === 'undefined') return;
     try {
       const rawSaved = localStorage.getItem('manual_latest_order');
@@ -359,7 +708,7 @@ export default function ManualOrderPage() {
             }))
             .filter((item) => item.quantity > 0);
           if (sanitized.length > 0) {
-            setCart(syncOfferRewards(sanitized));
+            setCart(syncOfferRewards(sanitized, offers));
           }
         }
       }
@@ -378,7 +727,7 @@ export default function ManualOrderPage() {
       console.warn('ManualOrder: could not hydrate cart draft', e);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [offersLoaded]);
 
   // Helper: compute bill data from an arbitrary cart snapshot
   function computeBillData(cartSnapshot) {
@@ -463,13 +812,6 @@ export default function ManualOrderPage() {
     return { lines, subtotal, total: sumCharge };
   }
 
-  // Selected bill data (either current cart or latest saved order)
-  const selectedBillData = useMemo(() => {
-    if (billSource === 'latest' && latestSavedOrder && Array.isArray(latestSavedOrder.fullCart)) {
-      return computeBillData(latestSavedOrder.fullCart || []);
-    }
-    return computeBillData(cart || []);
-  }, [billSource, latestSavedOrder, cart, menuData, offers]);
 
   // Lock background scroll when cart sheet is open (must be after all useState)
   useEffect(() => {
@@ -486,22 +828,42 @@ export default function ManualOrderPage() {
     };
   }, [cartSheetOpen]);
 
+  // cleanup reload toast timer on unmount
+  useEffect(() => {
+    return () => {
+      try {
+        if (reloadToastTimeout.current) {
+          clearTimeout(reloadToastTimeout.current);
+          reloadToastTimeout.current = null;
+        }
+      } catch (e) {}
+    };
+  }, []);
+
   // ---------------- CART FUNCTIONS ----------------
   // Sync buy_x_get_y reward items in cart: add/update/remove reward lines with price 0 and offerPrice
-  function syncOfferRewards(cartState) {
+  function syncOfferRewards(cartState, currentOffers) {
+    console.log('[syncOfferRewards] Called with cart length:', cartState?.length || 0, 'offers:', currentOffers?.length || 0);
+    if (!Array.isArray(cartState)) return [];
     const next = [...cartState];
-    const activeBuyXGetY = (offers || []).filter(o => o.active && o.type === 'buy_x_get_y');
+    const activeBuyXGetY = (currentOffers || []).filter(o => o.active && o.type === 'buy_x_get_y');
+    console.log('[syncOfferRewards] Active Buy X Get Y offers:', activeBuyXGetY.length);
 
     for (const offer of activeBuyXGetY) {
       const baseName = offer.base?.match?.name;
       const rewardDef = offer.reward?.items?.[0];
-      if (!baseName || !rewardDef) continue;
+      console.log(`[syncOfferRewards] Processing offer "${offer.name}": base=${baseName}, reward=${rewardDef?.name}`);
+      if (!baseName || !rewardDef) {
+        console.log('[syncOfferRewards] Skipping - missing base or reward');
+        continue;
+      }
 
-      const baseCount = next.reduce((s, it) => s + ((it.name === baseName) ? (it.quantity || 0) : 0), 0);
+      const baseCount = next.reduce((s, it) => s + ((it.name === baseName && !it.isOfferReward) ? (it.quantity || 0) : 0), 0);
       const perRewardQty = rewardDef.quantity || 1;
       const possibleRewards = Math.floor(baseCount / (offer.base?.quantity || 1)) * perRewardQty;
       const maxRewards = offer.limitPerOrder || possibleRewards;
       const rewardsToApply = Math.min(possibleRewards, maxRewards);
+      console.log(`[syncOfferRewards] baseCount=${baseCount}, rewardsToApply=${rewardsToApply}`);
 
       // find existing reward entries tied to this offer
       let existingRewardIndex = next.findIndex((it) => it.isOfferReward && it.offerId === offer.id && it.name === rewardDef.name);
@@ -510,21 +872,107 @@ export default function ManualOrderPage() {
       if (rewardsToApply > 0) {
         if (existingRewardIndex >= 0) {
           // update quantity
+          console.log(`[syncOfferRewards] ✅ Updating existing reward: ${rewardDef.name} qty ${existingQty} → ${rewardsToApply}`);
           next[existingRewardIndex] = { ...next[existingRewardIndex], quantity: rewardsToApply };
         } else {
           // add reward entry with price = 0 but keep offerPrice for display/total
+          console.log(`[syncOfferRewards] ✅ Adding NEW reward: ${rewardDef.name} qty ${rewardsToApply}`);
           next.push({ name: rewardDef.name, quantity: rewardsToApply, price: 0, offerPrice: rewardDef.price ?? 0, isOfferReward: true, offerId: offer.id });
         }
       } else {
         // remove existing reward entry if present
         if (existingRewardIndex >= 0) {
+          console.log(`[syncOfferRewards] ❌ Removing reward: ${rewardDef.name}`);
           next.splice(existingRewardIndex, 1);
         }
       }
     }
 
+    console.log('[syncOfferRewards] Final cart length:', next.length);
     return next;
   }
+
+  // Re-sync offer rewards when offers change (e.g. admin updated offers)
+  useEffect(() => {
+    console.log('[useEffect:offers] Offers changed, syncing cart rewards. Offers count:', offers?.length || 0);
+    try {
+      setCart((prev) => {
+        console.log('[useEffect:offers] Syncing rewards for cart with', prev?.length || 0, 'items');
+        try {
+          const updated = syncOfferRewards(prev || [], offers);
+          if (updated.length !== prev?.length) {
+            console.log('[useEffect:offers] 🎉 Cart updated! Items:', prev?.length, '→', updated.length);
+          }
+          return updated;
+        } catch (e) {
+          console.warn('syncOfferRewards failed during offers update', e);
+          return prev || [];
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to re-sync offers on update', e);
+    }
+  }, [offers]);
+
+  // Update cart item prices when menuData changes (e.g., when discounts are applied)
+  useEffect(() => {
+    console.log('[manual-order-complete] Cart price sync effect triggered, menuData keys:', Object.keys(menuData).length);
+    if (!menuData || Object.keys(menuData).length === 0) {
+      console.log('[manual-order-complete] Skipping cart sync - no menu data');
+      return;
+    }
+    
+    setCart((prev) => {
+      console.log('[manual-order-complete] Checking cart for price updates, cart length:', prev.length);
+      if (!prev || prev.length === 0) return prev;
+      
+      let hasChanges = false;
+      const updated = prev.map((cartItem) => {
+        // Skip offer reward items - they have fixed offerPrice
+        if (cartItem.isOfferReward) return cartItem;
+        
+        // Find the current menu item price
+        let currentMenuItem = null;
+        for (const category in menuData) {
+          const found = menuData[category]?.find(item => item.name === cartItem.name);
+          if (found) {
+            currentMenuItem = found;
+            break;
+          }
+        }
+        
+        // Debug: Log price comparison for each item
+        if (currentMenuItem) {
+          console.log(`[cart-sync] ${cartItem.name}:`);
+          console.log(`  - Cart price: ₹${cartItem.price}`);
+          console.log(`  - Menu price: ₹${currentMenuItem.price}`);
+          console.log(`  - Menu originalPrice: ₹${currentMenuItem.originalPrice || 'N/A'}`);
+          console.log(`  - Prices match: ${currentMenuItem.price === cartItem.price}`);
+        } else {
+          console.log(`[cart-sync] ${cartItem.name}: NOT FOUND in menu`);
+        }
+        
+        // If item found in menu and price has changed, update it
+        if (currentMenuItem && currentMenuItem.price !== cartItem.price) {
+          console.log(`[manual-order-complete] ✅ Updating cart price for ${cartItem.name}: ₹${cartItem.price} → ₹${currentMenuItem.price}`);
+          hasChanges = true;
+          return { ...cartItem, price: currentMenuItem.price };
+        }
+        
+        return cartItem;
+      });
+      
+      // Only update if there were actual changes to prevent infinite loops
+      if (hasChanges) {
+        console.log('[manual-order-complete] ✅ Cart prices UPDATED - syncing offers now');
+        // Re-sync offers after price update
+        return syncOfferRewards(updated, offers);
+      }
+      
+      console.log('[manual-order-complete] No cart price changes detected');
+      return prev;
+    });
+  }, [menuData]);
 
   const addToCart = useCallback((item) => {
     setCart((prev) => {
@@ -537,16 +985,16 @@ export default function ManualOrderPage() {
       } else {
         next.push({ ...item, quantity: 1 });
       }
-      return syncOfferRewards(next);
+      return syncOfferRewards(next, offers);
     });
-  }, []);
+  }, [offers]);
 
   const removeFromCart = useCallback((item) => {
     setCart((prev) => {
       const next = prev.filter((i) => !(i.name === item.name && i.isOfferReward === item.isOfferReward && (item.offerId ? i.offerId === item.offerId : true)));
-      return syncOfferRewards(next);
+      return syncOfferRewards(next, offers);
     });
-  }, []);
+  }, [offers]);
 
   const clearCart = () => setCart([]);
 
@@ -559,15 +1007,31 @@ export default function ManualOrderPage() {
         if (!existsReward) return prev;
         const newQty = (existsReward.quantity || 0) + delta;
         const next = newQty <= 0 ? prev.filter((i) => i !== existsReward) : prev.map((i) => i === existsReward ? { ...i, quantity: newQty } : i);
-        return syncOfferRewards(next);
+        return syncOfferRewards(next, offers);
       }
       const nextQty = (exists.quantity || 0) + delta;
       let next;
       if (nextQty <= 0) next = prev.filter((i) => !(i.name === name && !i.isOfferReward));
       else next = prev.map((i) => (i.name === name && !i.isOfferReward ? { ...i, quantity: nextQty } : i));
-      return syncOfferRewards(next);
+      return syncOfferRewards(next, offers);
     });
-  }, []);
+  }, [offers]);
+
+  // Adjust quantity for reward entries (match by name + offerId) safely
+  const changeQtyForReward = useCallback((name, offerId, delta) => {
+    setCart((prev) => {
+      const next = [...prev];
+      const idx = next.findIndex(i => i.name === name && i.isOfferReward && (offerId ? i.offerId === offerId : true));
+      if (idx === -1) return prev;
+      const newQty = (next[idx].quantity || 0) + delta;
+      if (newQty <= 0) {
+        next.splice(idx, 1);
+      } else {
+        next[idx] = { ...next[idx], quantity: newQty };
+      }
+      return syncOfferRewards(next, offers);
+    });
+  }, [offers]);
 
   // ---------------- ORDER HANDLER ----------------
   const placeOrder = async () => {
@@ -682,6 +1146,14 @@ export default function ManualOrderPage() {
 
   return (
     <div className="min-h-screen bg-white pb-20">
+      {/* Reload toast (shows briefly when menu/offers are reloaded) */}
+      {reloadToast && (
+        <div style={{ position: 'fixed', right: 16, top: 16, zIndex: 80 }} aria-live="polite">
+          <div style={{ background: 'rgba(0,0,0,0.85)', color: 'white', padding: '8px 12px', borderRadius: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.12)', fontSize: 14, fontWeight: 600, transition: 'transform .18s ease, opacity .18s ease', transform: 'translateY(0)', opacity: 1 }}>
+            {reloadToast}
+          </div>
+        </div>
+      )}
       <div className="mx-auto w-full max-w-[1280px] px-4 py-4">
         {/* Header: chevron integrated with filter chips */}
   <nav className="flex items-center mb-3">
@@ -707,9 +1179,27 @@ export default function ManualOrderPage() {
                       </svg>
                       <input
                         value={searchQuery}
+                        ref={searchInputRef}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === "Escape") {
+                          if (e.key === "ArrowDown") {
+                            e.preventDefault();
+                            if (filteredItems.length > 0) {
+                              setFocusedItemIdx(0);
+                              requestAnimationFrame(() => {
+                                const cards = document.querySelectorAll('.manual-order-card');
+                                if (cards[0]) {
+                                  cards[0].focus();
+                                  cards[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                              });
+                            }
+                          } else if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (focusedItemIdx >= 0 && filteredItems[focusedItemIdx]) {
+                              addToCart(filteredItems[focusedItemIdx]);
+                            }
+                          } else if (e.key === "Escape") {
                             setSearchMode(false);
                             setSearchQuery("");
                           }
@@ -722,7 +1212,6 @@ export default function ManualOrderPage() {
                       className="px-3 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 border border-gray-300"
                       onClick={() => {
                         setSearchMode(false);
-                        setSearchQuery("");
                       }}
                     >
                       Cancel
@@ -804,19 +1293,7 @@ export default function ManualOrderPage() {
                 touchStart.current = null;
               }}
             >
-              {(Object.entries(menuData)
-                .filter(
-                  ([category]) =>
-                    selectedCategory === "All" || selectedCategory === category
-                )
-                .flatMap(([category, items]) =>
-                  items
-                    .filter((item) =>
-                      searchMode && searchQuery
-                        ? item.name.toLowerCase().includes(searchQuery.toLowerCase())
-                        : true
-                    )
-                    .map((item, idx, arr) => {
+              {filteredItems.map((item, idx, arr) => {
                       const inStock = item.inStock !== false; // default to true
                       // For portrait, 2 cards per row
                       const rowIdx = getRowIndex(idx, 2);
@@ -848,6 +1325,9 @@ export default function ManualOrderPage() {
                           }}
                           onKeyDown={(event) => {
                             if (!inStock) return;
+                            // If cart sheet is open, treat Enter as place-order and avoid
+                            // adding items via keyboard to prevent conflicts.
+                            if (cartSheetOpen) return;
                             if (event.target instanceof HTMLElement && event.target.closest('button')) return;
                             if (event.key === 'Enter' || event.key === ' ') {
                               event.preventDefault();
@@ -877,12 +1357,13 @@ export default function ManualOrderPage() {
                                 if (inStock) addToCart(item);
                               }}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter' && inStock) {
-                                  e.preventDefault();
-                                  addToCart(item);
-                                }
-                                e.stopPropagation();
-                              }}
+                                  if (cartSheetOpen) { e.stopPropagation(); return; }
+                                  if (e.key === 'Enter' && inStock) {
+                                    e.preventDefault();
+                                    addToCart(item);
+                                  }
+                                  e.stopPropagation();
+                                }}
                               className={`inline-flex items-center justify-center rounded-full shadow-sm text-[1.1rem] h-[38px] w-[38px] sm:h-[48px] sm:w-[48px] sm:text-[1.25rem] ${inStock ? 'bg-orange-500 text-white hover:bg-orange-600 focus:ring-2 focus:ring-orange-300' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
                               title={inStock ? "Add to Cart" : "Unavailable"}
                               aria-label={inStock ? `Add ${item.name}` : "Unavailable"}
@@ -892,8 +1373,7 @@ export default function ManualOrderPage() {
                           </div>
                         </div>
                       );
-                    })
-                ))}
+          })}
             </div>
           </div>
 
@@ -942,7 +1422,7 @@ export default function ManualOrderPage() {
 
       {/* Manual Cart Bottom Sheet (separate from customer cart) */}
       {cartSheetOpen && (
-        <div className="fixed inset-0 z-[60]" role="dialog" aria-modal="true">
+        <div key={`cart-${dataVersion}`} className="fixed inset-0 z-[60]" role="dialog" aria-modal="true">
           <div className="absolute inset-0 bg-black/40" onClick={() => setCartSheetOpen(false)} />
           <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl p-4 pt-3" style={{ maxHeight: '85vh' }}>
             {/* <div className="h-1.5 w-10 bg-gray-300 rounded-full mx-auto mb-3" /> */}
@@ -1048,53 +1528,64 @@ export default function ManualOrderPage() {
                         const nodes = [];
 
                         // If some groups were consumed by offers, render a highlighted grouped line showing only the consumed quantity
-                        if (consumed > 0) {
-                          nodes.push(
-                            <li key={`group-${idx}`} className={`py-2 flex items-center justify-between gap-2 ${hasItemOffer ? 'border-l-4 border-yellow-500 bg-yellow-50' : ''}`}>
-                              <div className="min-w-0 flex flex-col gap-0.5">
-                                <span className="text-sm font-medium text-gray-800 truncate flex items-center gap-1">
-                                  {item.name}
-                                  <span className="ml-2 text-yellow-600 text-xs font-semibold">Offer Applied</span>
-                                </span>
-                                {rewardDisplays.length > 0 && (
-                                  <div className="text-xs text-green-700 font-semibold" style={{ maxWidth: 360 }}>
-                                    <div style={{ maxHeight: 48, overflow: 'auto', whiteSpace: 'normal', lineHeight: '1.15', paddingRight: 6 }}>
-                                      {`Reward: ${rewardDisplays.join(', ')}`}
+                          if (consumed > 0) {
+                            // Compute how many reward units are applied and the reward unit price.
+                            // The charge for the consumed group is rewardUnitPrice * rewardCount.
+                            let rewardUnitPrice = 0;
+                            let rewardCount = 0;
+                            for (const ofr of linkedOffers) {
+                              const rewardEntries = rewardsByOffer[ofr.id] || [];
+                              const totalAppliedRewards = rewardEntries.reduce((s, r) => s + (r.quantity || 0), 0);
+                              rewardCount += totalAppliedRewards;
+                              const rewardDef = ofr.reward?.items?.[0];
+                              if (!rewardUnitPrice && rewardDef && typeof rewardDef.price === 'number') {
+                                rewardUnitPrice = rewardDef.price;
+                              }
+                            }
+                            const chargeAmount = (rewardUnitPrice || 0) * (rewardCount || 0);
+
+                            nodes.push(
+                              <li key={`group-${idx}`} className={`py-2 flex items-center justify-between gap-2 ${hasItemOffer ? 'border-l-4 border-yellow-500 bg-yellow-50' : ''}`}>
+                                <div className="min-w-0 flex flex-col gap-0.5">
+                                  <span className="text-sm font-medium text-gray-800 truncate flex items-center gap-1">
+                                    {item.name}
+                                    <span className="ml-2 text-yellow-600 text-xs font-semibold">Offer Applied</span>
+                                  </span>
+                                  {rewardDisplays.length > 0 && (
+                                    <div className="text-xs text-green-700 font-semibold" style={{ maxWidth: 360 }}>
+                                      <div style={{ maxHeight: 48, overflow: 'auto', whiteSpace: 'normal', lineHeight: '1.15', paddingRight: 6 }}>
+                                        {`Reward: ${rewardDisplays.join(', ')}`}
+                                      </div>
                                     </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300"
+                                    onClick={() => changeQty(item.name, -1)}
+                                    aria-label="Decrease"
+                                    title="Decrease"
+                                  >
+                                    −
+                                  </button>
+                                  <span className="w-6 text-center text-sm font-semibold text-black">{consumed}</span>
+                                  <button
+                                    className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-orange-500 text-black hover:bg-orange-600"
+                                    onClick={() => changeQty(item.name, 1)}
+                                    aria-label="Increase"
+                                    title="Increase"
+                                  >
+                                    +
+                                  </button>
+                                  <div className="w-36 text-right text-sm text-black">
+                                    <div className="text-sm font-semibold">Consumed: {consumed}</div>
+                                    <div className="text-sm text-orange-500 font-semibold">Offer charge: ₹{chargeAmount}</div>
                                   </div>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300"
-                                  onClick={() => changeQty(item.name, -1)}
-                                  aria-label="Decrease"
-                                  title="Decrease"
-                                >
-                                  −
-                                </button>
-                                <span className="w-6 text-center text-sm font-semibold text-black">{consumed}</span>
-                                <button
-                                  className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-orange-500 text-black hover:bg-orange-600"
-                                  onClick={() => changeQty(item.name, 1)}
-                                  aria-label="Increase"
-                                  title="Increase"
-                                >
-                                  +
-                                </button>
-                                <span className="w-14 text-right text-sm text-black font-semibold">₹{rewardTotal}</span>
-                                <button
-                                  className="h-7 w-7 inline-flex items-center justify-center rounded-full border border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-300 ml-1"
-                                  onClick={() => changeQty(item.name, -consumed)}
-                                  aria-label={`Remove ${item.name}`}
-                                  title="Remove"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            </li>
-                          );
-                        }
+                                  <button className="h-7 w-7 inline-flex items-center justify-center rounded-full border border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-300 ml-1" onClick={() => changeQty(item.name, -consumed)} aria-label={`Remove ${item.name}`}>×</button>
+                                </div>
+                              </li>
+                            );
+                          }
 
                         // If there is leftover quantity, render a normal base line for the leftover units
                         if (leftover > 0) {
@@ -1136,6 +1627,31 @@ export default function ManualOrderPage() {
                               </div>
                             </li>
                           );
+                        }
+
+                        // Append explicit reward rows for any reward entries tied to the offers
+                        for (const ofr of linkedOffers) {
+                          const rewardEntries = rewardsByOffer[ofr.id] || [];
+                          for (const r of rewardEntries) {
+                            nodes.push(
+                              <li key={`reward-${ofr.id}-${r.name}-${idx}`} className="py-2 pl-6 flex items-center justify-between gap-2 bg-green-50">
+                                <div className="min-w-0 flex flex-col gap-0.5">
+                                  <span className="text-sm font-medium text-green-800 truncate flex items-center gap-1">
+                                    {r.name}
+                                    <span className="ml-2 text-green-600 text-xs font-semibold">Free (Offer)</span>
+                                  </span>
+                                  <span className="text-xs text-green-700">{`Offer price: ₹${r.offerPrice ?? 0}`}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300" onClick={() => changeQtyForReward(r.name, ofr.id, -1)} aria-label="Decrease">−</button>
+                                  <span className="w-6 text-center text-sm font-semibold text-black">{r.quantity}</span>
+                                  <button className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-orange-500 text-black hover:bg-orange-600" onClick={() => changeQtyForReward(r.name, ofr.id, 1)} aria-label="Increase">+</button>
+                                  <span className="w-14 text-right text-sm text-black font-semibold">₹{(r.offerPrice ?? 0) * (r.quantity || 0)}</span>
+                                  <button className="h-7 w-7 inline-flex items-center justify-center rounded-full border border-red-300 text-red-600 hover:bg-red-50 ml-1" onClick={() => removeFromCart(r)} aria-label={`Remove ${r.name}`}>×</button>
+                                </div>
+                              </li>
+                            );
+                          }
                         }
 
                         return nodes;
@@ -1185,7 +1701,7 @@ export default function ManualOrderPage() {
 
       {/* Bill Preview Modal */}
       {billOpen && (
-        <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center" role="dialog" aria-modal="true">
+        <div key={`bill-${dataVersion}-${cart.length}`} className="fixed inset-0 z-[70] flex items-end md:items-center justify-center" role="dialog" aria-modal="true">
           <div className="absolute inset-0 bg-black/40" onClick={() => setBillOpen(false)} />
           <div ref={billRef} className={`printable-bill ${paperFormat === 'thermal-80' ? 'thermal-80' : paperFormat === 'a4' ? 'a4' : ''} relative w-full md:w-[540px] max-h-[90vh] bg-white rounded-t-2xl md:rounded-lg shadow-2xl overflow-auto p-4`} style={{ borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
             <div className="flex items-center justify-between mb-3">
@@ -1299,4 +1815,35 @@ export default function ManualOrderPage() {
       )}
     </div>
   );
+  // Keyboard shortcuts for cart when open
+  useEffect(() => {
+    if (!cartSheetOpen) return;
+
+    const handleCartKey = (ev) => {
+      try {
+        console.log('[manual-order-complete] cart key event:', ev.key, 'ctrl:', ev.ctrlKey, 'isTyping:', isTypingInInput());
+
+        if (ev.key === 'Enter' && ev.ctrlKey) {
+          console.log('[manual-order-complete] Ctrl+Enter pressed, calling placeOrder');
+          ev.preventDefault();
+          placeOrder();
+          setCartSheetOpen(false);
+        } else if (ev.key === 'Escape') {
+          console.log('[manual-order-complete] Escape pressed, closing cart');
+          ev.preventDefault();
+          setCartSheetOpen(false);
+        }
+      } catch (e) {
+        console.log('[manual-order-complete] handleCartKey error', e);
+      }
+    };
+
+    console.log('[manual-order-complete] attaching cart key listener');
+    window.addEventListener('keydown', handleCartKey, { passive: false });
+    return () => {
+      console.log('[manual-order-complete] removing cart key listener');
+      window.removeEventListener('keydown', handleCartKey, { passive: false });
+    };
+  }, [cartSheetOpen, placeOrder]);
+
 }

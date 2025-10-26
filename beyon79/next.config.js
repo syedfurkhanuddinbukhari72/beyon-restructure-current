@@ -2,6 +2,8 @@
 const nextConfig = {
   // Enable static HTML export via Next.js 15 `output: export`
   output: 'export',
+  // Do not emit production browser source maps (avoid shipping original sources)
+  productionBrowserSourceMaps: false,
   // Removed static export options for dev server
   eslint: {
     ignoreDuringBuilds: true,

@@ -67,6 +67,53 @@ export default function ManualOrdersPage() {
     }
   }, []);
 
+  // Global keyboard shortcut handler for go_back
+  useEffect(() => {
+    const handleCustom = (e) => {
+      try {
+        const payload = e?.detail || {};
+        console.log('[manual-orders] handleCustom received payload', payload);
+        const action = payload.action;
+        if (action === 'go_back') {
+          console.log('[manual-orders] going back');
+          router.back();
+        } else if (action === 'open_bill') {
+          console.log('[manual-orders] open_bill -> opening bill');
+          router.push('/bill');
+        } else if (action === 'print_current') {
+          console.log('[manual-orders] print_current -> triggering print');
+          // Trigger print for the current bill
+          if (orders && orders.length > 0) {
+            // Simulate print action - in a real app, this would call a print function
+            console.log('Printing current bill data:', orders[0]);
+            // For now, just open the bill page with print=true to trigger print
+            router.push('/bill?print=true');
+          }
+        }
+      } catch (err) { /* ignore */ }
+    };
+
+    // Keyboard shortcut: Shift+C to go to manual order creation page
+    const handleKey = (ev) => {
+      if (ev.shiftKey && ev.key.toLowerCase() === 'c') {
+        ev.preventDefault();
+        router.push('/manual-order-complete');
+      }
+    };
+
+    window.addEventListener('beyon:app-shortcut', handleCustom);
+    window.addEventListener('keydown', handleKey);
+    // also support the simple global function hook if present
+    const origHook = window.onBeyonAppShortcut;
+    window.onBeyonAppShortcut = (p) => handleCustom({ detail: p });
+
+    return () => {
+      window.removeEventListener('beyon:app-shortcut', handleCustom);
+      window.removeEventListener('keydown', handleKey);
+      window.onBeyonAppShortcut = origHook;
+    };
+  }, [router, orders]);
+
   const handleOpenBill = useCallback((order) => {
     try {
       const normalized = (order.items || []).map((i) => ({
