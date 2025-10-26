@@ -1787,7 +1787,7 @@ export default function AdminPage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => typeof window !== 'undefined' && window.open('/admin-offers', '_self')}
+                                onClick={() => router.push('/admin-offers')}
                                 className="ml-2 px-2.5 py-1 rounded-md text-xs font-medium bg-red-600 text-white hover:bg-red-700"
                               >
                                 Manage Offers

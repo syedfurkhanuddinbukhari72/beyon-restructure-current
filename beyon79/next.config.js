@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Enable static HTML export via Next.js 15 `output: export`
+  // Use export output for static HTML generation instead of standalone
   output: 'export',
   // Do not emit production browser source maps (avoid shipping original sources)
   productionBrowserSourceMaps: false,

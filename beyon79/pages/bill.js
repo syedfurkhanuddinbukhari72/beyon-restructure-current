@@ -401,31 +401,6 @@ export default function BillPage() {
   // Initial load
   useEffect(() => {
     loadLatestOrder();
-    
-    // Set up a refresh button handler
-    const handleRefresh = () => loadLatestOrder();
-    
-    // Add refresh button to the page
-    const refreshButton = document.createElement('button');
-    refreshButton.textContent = '🔄 Refresh Bill';
-    refreshButton.style.position = 'fixed';
-    refreshButton.style.top = '10px';
-    refreshButton.style.right = '10px';
-    refreshButton.style.padding = '8px 16px';
-    refreshButton.style.backgroundColor = '#4CAF50';
-    refreshButton.style.color = 'white';
-    refreshButton.style.border = 'none';
-    refreshButton.style.borderRadius = '4px';
-    refreshButton.style.cursor = 'pointer';
-    refreshButton.style.zIndex = '1000';
-    refreshButton.onclick = handleRefresh;
-    
-    document.body.appendChild(refreshButton);
-    
-    // Clean up
-    return () => {
-      document.body.removeChild(refreshButton);
-    };
   }, [router?.query]);
 
   const captureTemplate = useCallback(async () => {

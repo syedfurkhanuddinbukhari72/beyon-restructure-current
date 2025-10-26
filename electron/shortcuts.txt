@@ -1,0 +1,17 @@
+# Beyon Desktop - Custom Shortcuts
+# File: electron/shortcuts.txt
+# Use this file to list custom keyboard shortcuts and the action they should perform in the Electron app.
+# Format: <Accelerator> => <Action> | <Optional notes>
+# Example:
+# CommandOrControl+P => print_current_order | Calls electronAPI.printReceipt for the selected order (preview:false)
+
+Shift+A => switch_to_active_tab | Focus or open the Active tab
+Shift+R => switch_to_ready_tab | Focus or open the Ready tab
+Shift+P => switch_to_paid_tab | Focus or open the Paid tab
+Shift+H => switch_to_archive_tab | Focus or open the Archive tab (changed from Shift+A to avoid conflict)
+Shift+C => cancel_order | Mark the selected order as Cancel
+Shift+L => local_mode | Toggle or open Local orders view
+
+DoubleB => open_bill | Double press 'b' to open bill
+DoubleP => print_current | Double press 'p' to print current order
+

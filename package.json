@@ -24,33 +24,46 @@
     "@capacitor/cli": "^7.4.3",
     "concurrently": "^9.0.0",
     "cross-env": "^7.0.3",
-    "electron": "^32.3.3",
+    "electron": "32.3.3",
     "electron-builder": "^25.0.0",
+    "jimp": "^1.6.0",
     "kill-port": "^2.0.1",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.4",
+    "to-ico": "^1.1.5",
     "wait-on": "^8.0.0"
   },
   "build": {
     "appId": "com.beyon.admindesktop",
-    "productName": "Beyon Admin Desktop",
-    "asar": false,
+    "productName": "Beyon Admin",
+    "copyright": "Copyright © 2025 Beyon",
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/**/*.node"
+    ],
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "electron/assets"
     },
     "files": [
       "electron/**/*",
       "beyon79/out/**/*",
-      "package.json"
+      "beyon79/public/**/*",
+      "beyon79/package.json",
+      "beyon79/next.config.js"
     ],
     "win": {
       "target": [
-        "nsis",
-        "dir"
-      ],
-      "icon": "electron/assets/icon.ico"
+        "nsis"
+      ]
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Beyon Admin",
+      "deleteAppDataOnUninstall": true
     }
   }
 }

@@ -1,0 +1,47 @@
+
+Production path candidates: {
+  appRoot: 'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources\\app.asar',
+  resourcesPath: 'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources',
+  candidateDirs: [
+    'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources\\beyon79\\out',
+    'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources\\app.asar\\beyon79\\out',
+    'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources\\app.asar\\beyon79\\out',
+    'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources\\app.asar\\beyon79\\out'
+  ]
+}
+Found exportDir, sample contents: [
+  '404.html',
+  '_next',
+  'admin-login.html',
+  'admin-offers-current.html',
+  'admin-offers-history.html',
+  'admin-offers.html',
+  'admin-unified.html',
+  'bill.html',
+  'cart.html',
+  'check-order-status.html',
+  'favicon.ico',
+  'file.svg',
+  'food',
+  'globe.svg',
+  'icons',
+  'images',
+  'index.html',
+  'item',
+  'maintenance.html',
+  'manual-order-complete.html',
+  'manual-orders.html',
+  'next.svg',
+  'order-confirmation.html',
+  'order-status.html',
+  'print-receipt.html',
+  'test-offer-page.html',
+  'test-offer.html',
+  'update-details.html',
+  'vercel.svg',
+  'window.svg'
+]
+Attempting to load files from: C:\Users\Syed Furkhan\Downloads\Beyon-desk\dist\win-unpacked\resources\app.asar\beyon79\out
+Loading flat file: C:\Users\Syed Furkhan\Downloads\Beyon-desk\dist\win-unpacked\resources\app.asar\beyon79\out\admin-unified.html
+[globalShortcut] p pressed
+[globalShortcut] p pressed

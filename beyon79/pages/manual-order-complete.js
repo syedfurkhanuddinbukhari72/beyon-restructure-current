@@ -343,13 +343,10 @@ export default function ManualOrderPage() {
 
   const loadOffersData = useCallback(async () => {
     try {
-      // Fetch offers from offers.json dynamically
-      const response = await fetch('/data/offers.json');
-      if (!response.ok) throw new Error('Failed to fetch offers.json');
-      const fetchedOffers = await response.json();
+      const storedOffers = await getOffersRules();
       if (!mountedRef.current) return;
-      if (Array.isArray(fetchedOffers)) {
-        setOffers(fetchedOffers);
+      if (Array.isArray(storedOffers)) {
+        setOffers(storedOffers);
         setDataVersion(v => v + 1); // Force re-render
         setOffersLoaded(true);
         if (!offersFirstLoadRef.current) showReloadToast('Offers updated — cart recalculated');
@@ -361,19 +358,9 @@ export default function ManualOrderPage() {
         offersFirstLoadRef.current = false;
       }
     } catch (err) {
-      console.warn("Failed to load offers from offers.json", err);
-      // Fallback to local storage or seed
-      try {
-        const storedOffers = await getOffersRules();
-        if (Array.isArray(storedOffers)) {
-          setOffers(storedOffers);
-        } else {
-          setOffers(offersSeed);
-        }
-      } catch (fallbackErr) {
-        console.warn("Fallback failed", fallbackErr);
-        setOffers(offersSeed);
-      }
+      console.warn("Failed to load offers from local storage", err);
+      if (!mountedRef.current) return;
+      setOffers(offersSeed);
       setOffersLoaded(true);
       if (!offersFirstLoadRef.current) showReloadToast('Offers updated — cart recalculated');
       offersFirstLoadRef.current = false;
@@ -1823,7 +1810,18 @@ export default function ManualOrderPage() {
       try {
         console.log('[manual-order-complete] cart key event:', ev.key, 'ctrl:', ev.ctrlKey, 'isTyping:', isTypingInInput());
 
-        if (ev.key === 'Enter' && ev.ctrlKey) {
+        const isTyping = isTypingInInput();
+        if (isTyping) {
+          console.log('[manual-order-complete] Ignoring cart key because typing in input');
+          return;
+        }
+
+        if (ev.key === 'Enter' && !ev.ctrlKey && !ev.shiftKey && !ev.altKey && !ev.metaKey) {
+          console.log('[manual-order-complete] Enter pressed, calling placeOrder');
+          ev.preventDefault();
+          placeOrder();
+          setCartSheetOpen(false);
+        } else if (ev.key === 'Enter' && ev.ctrlKey) {
           console.log('[manual-order-complete] Ctrl+Enter pressed, calling placeOrder');
           ev.preventDefault();
           placeOrder();

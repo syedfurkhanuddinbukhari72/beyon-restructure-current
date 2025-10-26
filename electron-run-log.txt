@@ -1,0 +1,13 @@
+
+Production path candidates: {
+  appRoot: 'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources\\app.asar',
+  resourcesPath: 'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources',
+  candidateDirs: [
+    'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources\\beyon79\\out',
+    'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources\\app.asar\\beyon79\\out'
+  ]
+}
+No exported HTML found in any candidate dirs [
+  'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources\\beyon79\\out',
+  'C:\\Users\\Syed Furkhan\\Downloads\\Beyon-desk\\dist\\win-unpacked\\resources\\app.asar\\beyon79\\out'
+]  appRoot: C:\Users\Syed Furkhan\Downloads\Beyon-desk\dist\win-unpacked\resources\app.asar

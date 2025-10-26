@@ -16,10 +16,10 @@
 - [x] Update pages/admin-login.js to use local authentication
 
 ## Phase 3: API Route Removal
-- [ ] Remove/disable pages/api/orders.js
-- [ ] Remove/disable pages/api/orders/[id].js
-- [ ] Remove/disable pages/api/orders/[id]/status.js
-- [ ] Remove/disable all pages/api/admin/*.js files
+- [x] Remove/disable pages/api/orders.js (no API routes exist)
+- [x] Remove/disable pages/api/orders/[id].js (no API routes exist)
+- [x] Remove/disable pages/api/orders/[id]/status.js (no API routes exist)
+- [x] Remove/disable all pages/api/admin/*.js files (no API routes exist)
 
 ## Phase 4: External Dependencies
 - [x] Remove image placeholder APIs from utils/imageMap.js (keep WhatsApp links)
