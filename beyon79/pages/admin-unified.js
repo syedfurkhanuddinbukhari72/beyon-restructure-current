@@ -36,6 +36,99 @@ const TABS = [
   "Offers",
 ];
 
+const createEmptyProductEditState = () => ({
+  open: false,
+  mode: null,
+  category: "",
+  product: null,
+  value: "",
+  busy: false,
+  error: ""
+});
+
+function ProductEditModal({ state, onClose, onChange, onSubmit }) {
+  const inputRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!state.open) return;
+    const handler = (event) => {
+      if (event.key === 'Escape' && !state.busy) {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [state.open, state.busy, onClose]);
+
+  React.useEffect(() => {
+    if (state.open && inputRef.current) {
+      setTimeout(() => {
+        try { inputRef.current?.focus(); } catch (e) {}
+      }, 0);
+    }
+  }, [state.open, state.mode]);
+
+  if (!state.open) return null;
+
+  const isPriceMode = state.mode === 'price';
+  const title = isPriceMode ? `Update price for ${state.product?.name ?? ''}` : `Rename ${state.product?.name ?? ''}`;
+  const label = isPriceMode ? 'Price' : 'Name';
+  const helper = isPriceMode ? 'Enter the new price (numbers only).' : 'Enter the new name.';
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={() => { if (!state.busy) onClose(); }} />
+      <div className="relative w-[min(420px,90%)] bg-white rounded-lg shadow-lg border border-gray-200 p-5 z-10" role="dialog" aria-modal="true">
+        <div className="text-lg font-semibold text-gray-800 mb-2">{title}</div>
+        <p className="text-sm text-gray-600 mb-4">{helper}</p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!state.busy) onSubmit();
+          }}
+        >
+          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="product-edit-input">
+            {label}
+          </label>
+          <input
+            id="product-edit-input"
+            ref={inputRef}
+            type={isPriceMode ? 'number' : 'text'}
+            step={isPriceMode ? '0.01' : undefined}
+            min={isPriceMode ? '0' : undefined}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            value={state.value}
+            onChange={(event) => onChange(event.target.value)}
+            disabled={state.busy}
+            autoComplete="off"
+            placeholder={isPriceMode ? 'e.g. 125' : 'Enter value'}
+          />
+          {state.error ? (
+            <div className="mt-2 text-sm text-red-600">{state.error}</div>
+          ) : null}
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => { if (!state.busy) onClose(); }}
+              className="px-3 py-2 rounded-md text-sm bg-gray-100 text-gray-800 hover:bg-gray-200 disabled:opacity-50"
+              disabled={state.busy}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-3 py-2 rounded-md text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-70"
+              disabled={state.busy}
+            >
+              {state.busy ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ✅ Status constants
 const ACTIVE_STATUSES = ["pending", "confirmed", "accepted", "preparing"];
 const READY_BACKEND_STATUSES = ["ready", "delivered"];
@@ -344,6 +437,7 @@ export default function AdminPage() {
   // Per-product loading map: key = `${category}::${productName}` => boolean
   const [productBusy, setProductBusy] = useState({});
   const [productMenuKey, setProductMenuKey] = useState(null);
+  const [productEditState, setProductEditState] = useState(() => createEmptyProductEditState());
   const productMenuRefs = useRef({});
   const productMenuButtonRefs = useRef({});
   // Per-product offer details toggle state
@@ -1033,79 +1127,120 @@ export default function AdminPage() {
     setProductMenuKey((prev) => (prev === key ? null : key));
   };
 
-  const handleEditPrice = async (category, product) => {
+  const handleEditPrice = (category, product) => {
     setProductMenuKey(null);
-    if (typeof window === 'undefined') return;
-    const current = typeof product.price === 'number' ? String(product.price) : '';
-    const input = window.prompt(`Update price for ${product.name}`, current);
-    if (input === null) return;
-    const trimmed = input.trim();
-    if (!trimmed) {
-      setToast('Price cannot be empty.');
-      return;
-    }
-    const priceValue = Number(trimmed);
-    if (Number.isNaN(priceValue) || priceValue < 0) {
-      setToast('Enter a valid price.');
-      return;
-    }
-    const key = JSON.stringify({ c: category, n: product.name });
-    if (productBusy[key]) return;
-    setProductBusy((prev) => ({ ...prev, [key]: true }));
-    try {
-      await localData.upsertProduct(category, { ...product, name: product.name, price: priceValue });
-      await fetchMenu();
-      setToast('Price updated.');
-    } catch (e) {
-      console.error('Edit price error', e);
-      setToast(e?.message ? `Failed to update price: ${e.message}` : 'Failed to update price.');
-    } finally {
-      setProductBusy((prev) => ({ ...prev, [key]: false }));
-    }
+    setProductEditState({
+      open: true,
+      mode: 'price',
+      category,
+      product,
+      value: typeof product.price === 'number' ? String(product.price) : '',
+      busy: false,
+      error: ''
+    });
   };
 
-  const handleEditName = async (category, product) => {
+  const handleEditName = (category, product) => {
     setProductMenuKey(null);
-    if (typeof window === 'undefined') return;
-    const input = window.prompt(`Rename ${product.name}`, product.name);
-    if (input === null) return;
-    const trimmed = input.trim();
-    if (!trimmed) {
-      setToast('Name cannot be empty.');
-      return;
-    }
-    if (trimmed === product.name) {
-      return;
-    }
-    const key = JSON.stringify({ c: category, n: product.name });
-    if (productBusy[key]) return;
-    setProductBusy((prev) => ({ ...prev, [key]: true }));
-    try {
-      const menuSnapshot = await localData.getMenu();
-      const list = Array.isArray(menuSnapshot?.[category]) ? [...menuSnapshot[category]] : [];
-      const dup = list.some((item) => String(item?.name || '').toLowerCase() === trimmed.toLowerCase());
-      if (dup) {
-        setToast('Another item with that name already exists.');
-        return;
-      }
-      const index = list.findIndex((item) => item?.name === product.name);
-      if (index === -1) {
-        setToast('Item not found. Refresh and try again.');
-        return;
-      }
-      const updated = { ...list[index], name: trimmed };
-      list[index] = updated;
-      const updatedMenu = { ...menuSnapshot, [category]: list };
-      await localData.saveMenu(updatedMenu);
-      await fetchMenu();
-      setToast('Name updated.');
-    } catch (e) {
-      console.error('Edit name error', e);
-      setToast(e?.message ? `Failed to update name: ${e.message}` : 'Failed to update name.');
-    } finally {
-      setProductBusy((prev) => ({ ...prev, [key]: false }));
-    }
+    setProductEditState({
+      open: true,
+      mode: 'name',
+      category,
+      product,
+      value: product?.name ?? '',
+      busy: false,
+      error: ''
+    });
   };
+
+  const closeProductEditModal = useCallback(() => {
+    setProductEditState(createEmptyProductEditState());
+  }, []);
+
+  const handleProductEditChange = useCallback((value) => {
+    setProductEditState((prev) => ({ ...prev, value, error: '' }));
+  }, []);
+
+  const submitProductEdit = useCallback(async () => {
+    if (!productEditState.open || productEditState.busy) return;
+
+    const { mode, category, product, value } = productEditState;
+    if (!mode || !category || !product) {
+      closeProductEditModal();
+      return;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setProductEditState((prev) => ({
+        ...prev,
+        error: mode === 'price' ? 'Price cannot be empty.' : 'Name cannot be empty.'
+      }));
+      return;
+    }
+
+    if (mode === 'name' && trimmed === product.name) {
+      closeProductEditModal();
+      return;
+    }
+
+    if (mode === 'price') {
+      const priceValue = Number(trimmed);
+      if (Number.isNaN(priceValue) || priceValue < 0) {
+        setProductEditState((prev) => ({ ...prev, error: 'Enter a valid price.' }));
+        return;
+      }
+    }
+
+    const busyKey = JSON.stringify({ c: category, n: product.name });
+    if (productBusy[busyKey]) return;
+
+    setProductEditState((prev) => ({ ...prev, busy: true, error: '' }));
+    setProductBusy((prev) => ({ ...prev, [busyKey]: true }));
+
+    try {
+      if (mode === 'price') {
+        const priceValue = Number(trimmed);
+        await localData.upsertProduct(category, { ...product, name: product.name, price: priceValue });
+      } else {
+        const menuSnapshot = await localData.getMenu();
+        const list = Array.isArray(menuSnapshot?.[category]) ? [...menuSnapshot[category]] : [];
+        const dup = list.some((item) => String(item?.name || '').toLowerCase() === trimmed.toLowerCase());
+        if (dup) {
+          setProductEditState((prev) => ({ ...prev, busy: false, error: 'Another item with that name already exists.' }));
+          setToast('Another item with that name already exists.');
+          return;
+        }
+        const index = list.findIndex((item) => item?.name === product.name);
+        if (index === -1) {
+          setProductEditState((prev) => ({ ...prev, busy: false, error: 'Item not found. Refresh and try again.' }));
+          setToast('Item not found. Refresh and try again.');
+          return;
+        }
+        const updated = { ...list[index], name: trimmed };
+        list[index] = updated;
+        const updatedMenu = { ...menuSnapshot, [category]: list };
+        await localData.saveMenu(updatedMenu);
+      }
+
+      await fetchMenu();
+      setToast(mode === 'price' ? 'Price updated.' : 'Name updated.');
+      closeProductEditModal();
+    } catch (error) {
+      console.error(mode === 'price' ? 'Edit price error' : 'Edit name error', error);
+      const failureMessage = error?.message
+        ? `Failed to update ${mode === 'price' ? 'price' : 'name'}: ${error.message}`
+        : `Failed to update ${mode === 'price' ? 'price' : 'name'}.`;
+      setToast(failureMessage);
+      setProductEditState((prev) => ({ ...prev, busy: false, error: failureMessage }));
+    } finally {
+      setProductBusy((prev) => {
+        const next = { ...prev };
+        delete next[busyKey];
+        return next;
+      });
+    }
+  }, [productEditState, productBusy, closeProductEditModal, fetchMenu]);
 
   const handleEditOffer = (category, product) => {
     setProductMenuKey(null);
@@ -1920,6 +2055,12 @@ export default function AdminPage() {
         )
       )}
       </div>
+      <ProductEditModal
+        state={productEditState}
+        onClose={closeProductEditModal}
+        onChange={handleProductEditChange}
+        onSubmit={submitProductEdit}
+      />
       {/* Confirm modal (global) */}
       <ConfirmModal
         open={confirmState.open}
@@ -1928,12 +2069,13 @@ export default function AdminPage() {
         confirmText={confirmState.confirmText}
         cancelText={confirmState.cancelText}
         busy={confirmState.busy}
-        onCancel={() => setConfirmState({ open: false })}
+        onCancel={() => {
+          if (!confirmState.busy) setConfirmState({ open: false });
+        }}
         onConfirm={async () => {
-          try {
-            if (typeof confirmState.onConfirm === 'function') await confirmState.onConfirm();
-          } catch (e) {
-            console.error('Confirm action failed', e);
+          if (confirmState.busy) return;
+          if (typeof confirmState.onConfirm === 'function') {
+            await confirmState.onConfirm();
           }
         }}
       />

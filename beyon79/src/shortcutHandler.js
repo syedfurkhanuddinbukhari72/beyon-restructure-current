@@ -84,11 +84,13 @@ if (typeof window !== 'undefined') {
             if (!ev) return;
             const raw = ev.key || '';
             const key = String(raw).toLowerCase();
+            const isShiftAccelerator = ev.shiftKey && (key === 'c' || key === 'r' || key === 'p' || key === 'a' || key === 'h' || key === 'l' || key === 'enter');
             // Only care about m, b, p and Shift+keys here
-            if (key !== 'm' && key !== 'b' && key !== 'p' && !(ev.shiftKey && (key === 'c' || key === 'r' || key === 'p' || key === 'a' || key === 'h' || key === 'l'))) return;
+            if (key !== 'm' && key !== 'b' && key !== 'p' && !isShiftAccelerator) return;
             // ignore modifier combos other than Shift
             if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
-            if (isTypingInInput()) return;
+            const typing = isTypingInInput();
+            if (typing && !(ev.shiftKey && key === 'enter')) return;
 
             // Debug
             console.log('[shortcutHandler] keyup', { key, shiftKey: ev.shiftKey, time: Date.now() });
@@ -165,6 +167,10 @@ if (typeof window !== 'undefined') {
               ev.preventDefault && ev.preventDefault();
               window.postMessage({ type: 'app-shortcut', payload: { action: 'local_mode' } }, '*');
               console.log('[shortcutHandler] local Shift+L -> local_mode');
+            } else if (ev.shiftKey && key === 'enter') {
+              ev.preventDefault && ev.preventDefault();
+              window.postMessage({ type: 'app-shortcut', payload: { action: 'place_order' } }, '*');
+              console.log('[shortcutHandler] local Shift+Enter -> place_order');
             }
           } catch (e) {
             // ignore

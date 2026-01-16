@@ -58,8 +58,9 @@ function disableDevTools() {
     'Shift+R', // Ready tab
     'Shift+P', // Paid tab
     'Shift+H', // History tab
-    'Shift+C', // Cancel order
-    'Shift+L'  // Local orders
+    'Shift+C', // Cancel order / open cart
+    'Shift+L', // Local orders
+    'Shift+Enter' // Place order
   ];
   
   appShortcuts.forEach(shortcut => {
@@ -404,6 +405,14 @@ app.whenReady().then(() => {
       console.log('[globalShortcut] sent local_mode');
     }
   });
+  globalShortcut.register('Shift+Enter', () => {
+    console.log('[globalShortcut] Shift+Enter pressed');
+    const payload = { action: 'place_order' };
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('app-shortcut', payload);
+      console.log('[globalShortcut] sent place_order');
+    }
+  });
   globalShortcut.register('m', () => {
     console.log('[globalShortcut] m pressed');
     const now = Date.now();
@@ -536,6 +545,15 @@ app.whenReady().then(() => {
             console.log('[menu] shortcut Cancel order (Shift+C) clicked');
             const payload = { action: 'cancel_order' };
             // Use main-side dedupe/send helper
+            sendAppShortcut(payload);
+          }
+        },
+        {
+          label: 'Place order',
+          accelerator: 'Shift+Enter',
+          click: () => {
+            console.log('[menu] shortcut Place order (Shift+Enter) clicked');
+            const payload = { action: 'place_order' };
             sendAppShortcut(payload);
           }
         },

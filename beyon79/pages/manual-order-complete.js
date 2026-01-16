@@ -389,64 +389,6 @@ export default function ManualOrderPage() {
     loadOffersData();
   }, [loadMenuData, loadOffersData]);
 
-  // Global keyboard shortcut handler (postMessage)
-  useEffect(() => {
-    const handleMessage = (e) => {
-      try {
-        const d = e.data;
-        if (!d || d.type !== 'beyon:app-shortcut') return;
-        const payload = d.payload || {};
-        try { console.log('[manual-order-complete] received beyon:app-shortcut', { payload, ts: Date.now(), adminLast: window.__admin_lastOpenCart || null, adminFlag: window.__admin_openCartPostedFlag || null }); } catch (e) {}
-        const action = payload.action;
-        if (!action) return;
-        switch (action) {
-          case 'open_bill':
-            console.log('[manual-order-complete] open_bill -> opening bill');
-            router.push('/bill');
-            break;
-          case 'open_cart':
-            console.log('[manual-order-complete] open_cart -> opening cart sheet');
-            setCartSheetOpen(true);
-            break;
-          case 'print_current':
-            console.log('[manual-order-complete] print_current -> triggering print');
-            // Trigger print for the current bill
-            if (selectedBillData && selectedBillData.lines && selectedBillData.lines.length > 0) {
-              // Simulate print action - in a real app, this would call a print function
-              console.log('Printing current bill data:', selectedBillData);
-            // For now, just open the bill page with print=true to trigger print
-            router.push('/bill?print=true');
-            }
-            break;
-          default:
-            break;
-        }
-      } catch (err) {
-        console.warn('[manual-order-complete] handleMessage error', err);
-      }
-    };
-    // If the page was opened with ?openCart=1, auto-open the cart sheet.
-    try {
-      const qs = (typeof window !== 'undefined' && window.location && window.location.search) || '';
-      if (qs && qs.indexOf('openCart=1') !== -1) {
-        console.log('[manual-order-complete] query openCart=1 detected, opening cart sheet');
-        setCartSheetOpen(true);
-      }
-    } catch (e) {}
-    window.addEventListener('message', handleMessage);
-    // dev helper: expose a method to simulate an incoming open_cart and log the flow
-    try {
-      window.__manual_dev_helpers = window.__manual_dev_helpers || {};
-      window.__manual_dev_helpers.simulateOpenCart = function () {
-        try {
-          console.log('[manual-order-complete] simulateOpenCart() posting test beyon:app-shortcut');
-          window.postMessage({ type: 'beyon:app-shortcut', payload: { action: 'open_cart' } }, '*');
-        } catch (e) { console.warn('simulateOpenCart failed', e); }
-      };
-    } catch (e) {}
-    return () => window.removeEventListener('message', handleMessage);
-  }, [router, selectedBillData]);
-
   useEffect(() => {
     const target = categoryRefs.current?.[selectedCategory];
     if (target && typeof target.scrollIntoView === 'function') {
@@ -602,6 +544,40 @@ export default function ManualOrderPage() {
   // Helper: get row index for a given item index (for portrait mode, 2 cards per row)
   function getRowIndex(idx, cardsPerRow = 2) {
     return Math.floor(idx / cardsPerRow);
+  }
+
+  // Keyboard navigation handler for the items grid. Supports Arrow keys and
+  // moves focus among `.manual-order-card` elements. Uses columns = 2 in
+  // portrait mode and 4 otherwise to make ArrowUp/Down behave as expected.
+  function handleGridKeyDown(e) {
+    try {
+      const key = e.key;
+      if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(key)) return;
+
+      const cards = Array.from(document.querySelectorAll('.manual-order-card')).filter((c) => c && c.tabIndex >= 0);
+      if (!cards || cards.length === 0) return;
+
+      const cols = isPortrait ? 2 : 4;
+      const active = document.activeElement;
+      let idx = cards.indexOf(active);
+      // If nothing focused in grid, default to first
+      if (idx === -1) idx = 0;
+
+      if (key === 'ArrowRight') idx = Math.min(cards.length - 1, idx + 1);
+      if (key === 'ArrowLeft') idx = Math.max(0, idx - 1);
+      if (key === 'ArrowDown') idx = Math.min(cards.length - 1, idx + cols);
+      if (key === 'ArrowUp') idx = Math.max(0, idx - cols);
+
+      const target = cards[idx];
+      if (target) {
+        e.preventDefault();
+        // Focus and make visually obvious (onFocus handler will also add class)
+        try { target.focus(); } catch (err) {}
+        try { target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' }); } catch (err) {}
+      }
+    } catch (err) {
+      console.warn('[manual-order-complete] grid key handler error', err);
+    }
   }
 
   const filteredItems = useMemo(() => {
@@ -1086,6 +1062,100 @@ export default function ManualOrderPage() {
     }
   };
 
+  // Local Shift+Enter handler to trigger place order directly
+  useEffect(() => {
+    const handleShiftEnter = async (ev) => {
+      if ((ev.key || '').toLowerCase() !== 'enter') return;
+      if (!ev.shiftKey || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+      if (!cartSheetOpen) return;
+      ev.preventDefault();
+      try {
+        await placeOrder();
+        setCartSheetOpen(false);
+      } catch (error) {
+        console.warn('[manual-order-complete] Shift+Enter place order failed', error);
+      }
+    };
+    window.addEventListener('keydown', handleShiftEnter, { capture: false });
+    return () => window.removeEventListener('keydown', handleShiftEnter, { capture: false });
+  }, [cartSheetOpen, placeOrder]);
+
+  // Global keyboard shortcut handler (postMessage)
+  useEffect(() => {
+    const handleMessage = (e) => {
+      try {
+        const d = e.data;
+        if (!d || d.type !== 'beyon:app-shortcut') return;
+        const payload = d.payload || {};
+        try {
+          console.log('[manual-order-complete] received beyon:app-shortcut', {
+            payload,
+            ts: Date.now(),
+            adminLast: window.__admin_lastOpenCart || null,
+            adminFlag: window.__admin_openCartPostedFlag || null,
+          });
+        } catch (e) {}
+        const action = payload.action;
+        if (!action) return;
+        switch (action) {
+          case 'open_bill':
+            console.log('[manual-order-complete] open_bill -> opening bill');
+            router.push('/bill');
+            break;
+          case 'open_cart':
+            console.log('[manual-order-complete] open_cart -> opening cart sheet');
+            setCartSheetOpen(true);
+            break;
+          case 'print_current':
+            console.log('[manual-order-complete] print_current -> triggering print');
+            if (selectedBillData && selectedBillData.lines && selectedBillData.lines.length > 0) {
+              console.log('Printing current bill data:', selectedBillData);
+              router.push('/bill?print=true');
+            }
+            break;
+          case 'place_order':
+            console.log('[manual-order-complete] place_order shortcut received');
+            (async () => {
+              try {
+                await placeOrder();
+                setCartSheetOpen(false);
+              } catch (err) {
+                console.warn('[manual-order-complete] place_order shortcut failed', err);
+              }
+            })();
+            break;
+          default:
+            break;
+        }
+      } catch (err) {
+        console.warn('[manual-order-complete] handleMessage error', err);
+      }
+    };
+
+    try {
+      const qs = (typeof window !== 'undefined' && window.location && window.location.search) || '';
+      if (qs && qs.indexOf('openCart=1') !== -1) {
+        console.log('[manual-order-complete] query openCart=1 detected, opening cart sheet');
+        setCartSheetOpen(true);
+      }
+    } catch (e) {}
+
+    window.addEventListener('message', handleMessage);
+    try {
+      window.__manual_dev_helpers = window.__manual_dev_helpers || {};
+      window.__manual_dev_helpers.simulateOpenCart = function () {
+        try {
+          console.log('[manual-order-complete] simulateOpenCart() posting test beyon:app-shortcut');
+          window.postMessage({ type: 'beyon:app-shortcut', payload: { action: 'open_cart' } }, '*');
+        } catch (e) {
+          console.warn('simulateOpenCart failed', e);
+        }
+      };
+    } catch (e) {}
+
+    return () => window.removeEventListener('message', handleMessage);
+  }, [router, selectedBillData, placeOrder]);
+
   // ---------------- UI ----------------
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1141,6 +1211,12 @@ export default function ManualOrderPage() {
           </div>
         </div>
       )}
+
+      {/* Keyboard focus styling override: ensure keyboard-focused cards show a black border */}
+      <style>{`
+        .manual-order-card.keyboard-focused { border-color: #000 !important; }
+        .manual-order-card:focus { border-color: #000 !important; outline: none; }
+      `}</style>
       <div className="mx-auto w-full max-w-[1280px] px-4 py-4">
         {/* Header: chevron integrated with filter chips */}
   <nav className="flex items-center mb-3">
@@ -1237,7 +1313,7 @@ export default function ManualOrderPage() {
                       }}
                       className={`px-3.5 py-2 mr-2 mb-2 rounded-full text-[0.95rem] font-medium transition-colors whitespace-nowrap ${
                         selectedCategory === category
-                          ? "bg-orange-500 text-white"
+                          ? "bg-orange-500 text-white border border-black"
                           : "bg-gray-100 text-gray-800 hover:bg-gray-200"
                       }`}
                       title={category}
@@ -1257,6 +1333,7 @@ export default function ManualOrderPage() {
             <div
               className={`manual-order-grid grid gap-3 ${isPortrait ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-4' : ''}`}
               style={isPortrait ? undefined : { gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}
+              onKeyDown={handleGridKeyDown}
               onTouchStart={(event) => {
                 if (event.touches.length !== 1) return;
                 const touch = event.touches[0];
@@ -1296,7 +1373,10 @@ export default function ManualOrderPage() {
                       };
                       const paddingClass = isPortrait ? 'p-2.5 sm:p-3' : 'p-2 sm:p-2';
                       const heightClass = !isPortrait && !isRowTall ? 'min-h-[118px]' : '';
-                      const cardClasses = `manual-order-card rounded-lg bg-white ${paddingClass} shadow-sm hover:shadow transition-shadow flex flex-col transform origin-top-left scale-[0.90] sm:scale-100 border-2 ${inStock ? 'border-orange-400' : 'border-gray-300'} sm:${inStock ? 'border-orange-500' : 'border-gray-400'} relative ${heightClass}`;
+                      const borderClasses = inStock
+                        ? 'border-orange-500 sm:border-orange-500 hover:border-black focus:border-black focus-visible:border-black'
+                        : 'border-gray-300 sm:border-gray-400';
+                      const cardClasses = `manual-order-card rounded-lg bg-gray-50 ${paddingClass} shadow-sm hover:shadow transition-shadow flex flex-col transform origin-top-left scale-[0.90] sm:scale-100 border-2 ${borderClasses} hover:bg-black/5 focus:bg-black/5 relative ${heightClass}`;
                       const cardStyle = isRowTall ? { minHeight: 220 } : undefined;
                       return (
                         <div
@@ -1320,6 +1400,12 @@ export default function ManualOrderPage() {
                               event.preventDefault();
                               addToCart(item);
                             }
+                          }}
+                          onFocus={(e) => {
+                            try { e.currentTarget.classList.add('keyboard-focused'); } catch (err) {}
+                          }}
+                          onBlur={(e) => {
+                            try { e.currentTarget.classList.remove('keyboard-focused'); } catch (err) {}
                           }}
                           style={cardStyle}
                         >
@@ -1806,27 +1892,27 @@ export default function ManualOrderPage() {
   useEffect(() => {
     if (!cartSheetOpen) return;
 
-    const handleCartKey = (ev) => {
+    const handleCartKey = async (ev) => {
       try {
         console.log('[manual-order-complete] cart key event:', ev.key, 'ctrl:', ev.ctrlKey, 'isTyping:', isTypingInInput());
 
-        const isTyping = isTypingInInput();
-        if (isTyping) {
-          console.log('[manual-order-complete] Ignoring cart key because typing in input');
-          return;
-        }
+      const isTyping = isTypingInInput();
+      if (isTyping) {
+        console.log('[manual-order-complete] Ignoring cart key because typing in input');
+        return;
+      }
 
-        if (ev.key === 'Enter' && !ev.ctrlKey && !ev.shiftKey && !ev.altKey && !ev.metaKey) {
-          console.log('[manual-order-complete] Enter pressed, calling placeOrder');
-          ev.preventDefault();
-          placeOrder();
-          setCartSheetOpen(false);
-        } else if (ev.key === 'Enter' && ev.ctrlKey) {
-          console.log('[manual-order-complete] Ctrl+Enter pressed, calling placeOrder');
-          ev.preventDefault();
-          placeOrder();
-          setCartSheetOpen(false);
-        } else if (ev.key === 'Escape') {
+      if (ev.key === 'Enter' && !ev.ctrlKey && !ev.shiftKey && !ev.altKey && !ev.metaKey) {
+        console.log('[manual-order-complete] Enter pressed, calling placeOrder');
+        ev.preventDefault();
+        await placeOrder();
+        setCartSheetOpen(false);
+      } else if (ev.key === 'Enter' && ev.ctrlKey) {
+        console.log('[manual-order-complete] Ctrl+Enter pressed, calling placeOrder');
+        ev.preventDefault();
+        await placeOrder();
+        setCartSheetOpen(false);
+      } else if (ev.key === 'Escape') {
           console.log('[manual-order-complete] Escape pressed, closing cart');
           ev.preventDefault();
           setCartSheetOpen(false);

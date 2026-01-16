@@ -1,32 +1,10 @@
-# TODO: Make App Fully Offline
+# TODO: Add Black Border to Selected Category Button
 
-## Phase 1: Core API Replacement
-- [x] Update utils/api.js to use localDataService instead of fetch calls
-- [ ] Test createOrder and getOrders functions work locally
+## Tasks
+- [x] Edit manual-order-complete.js to add "border border-black" to the selected category button class
+- [x] Test the change by running the dev server and verifying the UI
 
-## Phase 2: Page Component Updates
-- [x] Update pages/order-status.js to use local data
-- [x] Update pages/manual-orders.js to use local data
-- [x] Update pages/manual-order-complete.js to use local data
-- [x] Update pages/item/[slug].js to use local menu data
-- [x] Update pages/cart.js to use local offers rules
-- [x] Update pages/admin-offers.js to use local data
-- [x] Update pages/admin-offers-history.js to use local data
-- [x] Update pages/admin-offers-current.js to use local data
-- [x] Update pages/admin-login.js to use local authentication
-
-## Phase 3: API Route Removal
-- [x] Remove/disable pages/api/orders.js (no API routes exist)
-- [x] Remove/disable pages/api/orders/[id].js (no API routes exist)
-- [x] Remove/disable pages/api/orders/[id]/status.js (no API routes exist)
-- [x] Remove/disable all pages/api/admin/*.js files (no API routes exist)
-
-## Phase 4: External Dependencies
-- [x] Remove image placeholder APIs from utils/imageMap.js (keep WhatsApp links)
-- [x] Update any backend URL references
-
-## Phase 5: Testing
-- [ ] Test all functionality works offline
-- [ ] Verify localforage storage is working
-- [ ] Test admin panel functionality
-- [ ] Test order creation and management
+## Notes
+- The category buttons are in the navigation section of manual-order-complete.js
+- Currently, selected state has "bg-orange-500 text-white"
+- Add "border border-black" to make the border black when selected
