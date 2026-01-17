@@ -6,130 +6,13 @@ import offersSeed from "../data/offers.json";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { getMenu, getOffersRules, upsertLocalOrder } from "../src/localDataService";
+import ItemsGrid from '../components/manual-order/ItemsGrid';
+import { getOfferDetails, hasOffer, getActiveDiscountOfferForItem, computeBillData, getRowIndex, isLongOfferText, getOfferItems } from '../utils/manualOrderHelpers';
 
 const CART_DRAFT_KEY = "manualOrder:cartDraft";
 const CART_META_KEY = "manualOrder:cartMeta";
 
-// Helper: get the currently active discount offer for an item from current offers (not offer history)
-function getActiveDiscountOfferForItem(item, menuData, offersJson) {
-  let activeOffer = null;
-  for (const offer of offersJson) {
-    if (!offer.active) continue;
-    if (offer.type === "discount") {
-      const { scope, category, item: offerItem } = offer;
-      const applies =
-        scope === "all" ||
-        (scope === "category" && category && menuData[category]?.some((it) => it.name === item.name)) ||
-        (scope === "item" && offerItem === item.name);
-      if (applies) {
-        activeOffer = offer;
-        break;
-      }
-    }
-  }
-  return activeOffer;
-}
 
-// Helper: check if an item has an offer
-function hasOffer(item, offersJson, menuData) {
-  return getOfferDetails(item, offersJson, menuData) !== "Offer details unavailable.";
-}
-
-// Helper: get offer details string for an item
-function getOfferDetails(item, offersJson, menuData) {
-  // Check for discount offers (items with originalPrice)
-  if (typeof item.originalPrice === 'number' && item.originalPrice > item.price) {
-    const discount = item.originalPrice - item.price;
-    return `₹${discount} off (₹${item.originalPrice} → ₹${item.price})`;
-  }
-
-  const bundleOffers = (offersJson || []).filter((rule) => {
-    if (!rule.active) return false;
-    const nameEq = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
-    if (rule.type === 'buy_x_get_y') {
-      const baseMatch = rule.base && rule.base.match ? (
-        (rule.base.match.name ? nameEq(rule.base.match.name, item.name) : false)
-      ) : false;
-      const rewardMatch = (rule.reward?.items || []).some((r) => nameEq(r.name, item.name));
-      return baseMatch || rewardMatch;
-    }
-    if (rule.type === 'fixed_combo_price') {
-      const reqs = Array.isArray(rule.required) ? rule.required : [];
-      return reqs.some((r) => nameEq(r.name, item.name));
-    }
-    return false;
-  });
-  if (bundleOffers.length > 0) {
-    return bundleOffers.map((r) => {
-      if (r.type === 'buy_x_get_y') {
-        return `Buy ${r.base?.quantity || 0} x ${r.base?.match?.name || r.base?.match?.category || 'item'} → Get ${r.reward?.items?.[0]?.quantity || 1} x ${r.reward?.items?.[0]?.name} @ ₹${r.reward?.items?.[0]?.price ?? 0}`;
-      }
-      if (r.type === 'fixed_combo_price') {
-        return `Combo: ₹${r.price} — Required: ${(r.required || []).map((x) => x.name || x.category).join(', ')}`;
-      }
-      return 'Bundle/Combo offer';
-    }).join('\n');
-  }
-  return "Offer details unavailable.";
-}
-
-// Helper: check if text is long for the popup (portrait mode)
-function isLongOfferText(text, maxChars = 60) {
-  return text && text.length > maxChars;
-}
-
-function OfferBadge({ item, offersJson, menuData, onExpand, isExpanded, isTall }) {
-  const details = getOfferDetails(item, offersJson, menuData);
-  return (
-    <>
-      <div className="absolute left-2 bottom-2 z-10">
-        <button
-          type="button"
-          className="bg-yellow-50 text-yellow-500 border border-yellow-300 rounded-full px-2 py-0.5 text-lg font-bold shadow hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-yellow-400"
-          style={{ minWidth: 28, minHeight: 28, lineHeight: 1 }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onExpand(item.name);
-          }}
-          title="Offer Applied"
-          aria-label="Offer Applied"
-        >
-          ☆
-        </button>
-      </div>
-      {isExpanded && (
-        <div
-          className="absolute inset-0 z-50 flex items-center justify-center transition-all duration-200 ease-in-out"
-          style={{animation: 'fadeInScale 0.18s'}}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="w-full h-full bg-gray-200/80 backdrop-blur-sm border border-gray-300 rounded-lg shadow-lg flex flex-col items-center justify-center px-4 py-3 text-gray-800 text-sm relative transition-all duration-200 ease-in-out" style={{ animation: 'fadeInScale 0.18s', minHeight: 120 }}>
-            <div className="bg-gray-100 text-gray-900 rounded px-3 py-2 mb-6 text-center text-sm font-medium shadow-sm border border-gray-300 max-w-xs mx-auto whitespace-pre-line">
-              {details}
-            </div>
-            <button
-              className="absolute right-3 bottom-3 bg-gray-100 text-gray-700 border border-gray-300 rounded-full w-7 h-7 flex items-center justify-center shadow hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 text-lg"
-              style={{lineHeight:1}}
-              onClick={(e) => {
-                e.stopPropagation();
-                onExpand(null);
-              }}
-              aria-label="Close"
-            >
-              ×
-            </button>
-          </div>
-          <style jsx>{`
-            @keyframes fadeInScale {
-              0% { opacity: 0; transform: scale(0.95); }
-              100% { opacity: 1; transform: scale(1); }
-            }
-          `}</style>
-        </div>
-      )}
-    </>
-  );
-}
 
 export default function ManualOrderPage() {
   const [menuData, setMenuData] = useState(menuSeed);
@@ -157,7 +40,6 @@ export default function ManualOrderPage() {
   const [downloading, setDownloading] = useState(false);
   const [paperFormat, setPaperFormat] = useState('auto');
   const [expandedOffer, setExpandedOffer] = useState(null);
-  const [expandedRow, setExpandedRow] = useState(null);
   const [isPortrait, setIsPortrait] = useState(true);
   const [latestSavedOrder, setLatestSavedOrder] = useState(null);
   const [billSource, setBillSource] = useState('cart'); // 'cart' or 'latest'
@@ -508,48 +390,14 @@ export default function ManualOrderPage() {
     };
   }, [loadMenuData, loadOffersData]);
   // Utility: Get set of item names with active offers (discount/category/item or bundle/combo)
-  function getOfferItems(menuData, offersJson) {
-    const offerItems = new Set();
-    // Add items from active discount offers applied to menu data (items with originalPrice)
-    Object.values(menuData).flat().forEach((item) => {
-      if (typeof item.originalPrice === 'number' && item.originalPrice > item.price) {
-        offerItems.add(item.name);
-      }
-    });
-    // Add items from active bundle/combo offers in offers.json
-    if (Array.isArray(offersJson)) {
-      offersJson.forEach((rule) => {
-        if (!rule.active) return;
-        if (rule.type === 'buy_x_get_y') {
-          if (rule.base && rule.base.match && rule.base.match.name) {
-            offerItems.add(rule.base.match.name);
-          }
-          if (Array.isArray(rule.reward?.items)) {
-            rule.reward.items.forEach((r) => r.name && offerItems.add(r.name));
-          }
-        }
-        if (rule.type === 'fixed_combo_price') {
-          if (Array.isArray(rule.required)) {
-            rule.required.forEach((r) => r.name && offerItems.add(r.name));
-          }
-        }
-      });
-    }
-    return offerItems;
-  }
   // Memoize offer items for badge
   const offerItems = useMemo(() => getOfferItems(menuData, offers), [menuData, offers]);
   const categories = useMemo(() => ["All", ...Object.keys(menuData)], [menuData]);
 
-  // Helper: get row index for a given item index (for portrait mode, 2 cards per row)
-  function getRowIndex(idx, cardsPerRow = 2) {
-    return Math.floor(idx / cardsPerRow);
-  }
-
   // Keyboard navigation handler for the items grid. Supports Arrow keys and
   // moves focus among `.manual-order-card` elements. Uses columns = 2 in
   // portrait mode and 4 otherwise to make ArrowUp/Down behave as expected.
-  function handleGridKeyDown(e) {
+  const handleGridKeyDown = useCallback((e) => {
     try {
       const key = e.key;
       if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(key)) return;
@@ -578,7 +426,32 @@ export default function ManualOrderPage() {
     } catch (err) {
       console.warn('[manual-order-complete] grid key handler error', err);
     }
-  }
+  }, [isPortrait]);
+
+  // Touch handlers for swipe gestures
+  const handleTouchStart = useCallback((event) => {
+    if (event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+  }, []);
+
+  const handleTouchEnd = useCallback((event) => {
+    if (!touchStart.current || event.changedTouches.length !== 1) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - touchStart.current.x;
+    const dy = touch.clientY - touchStart.current.y;
+    const dt = Date.now() - touchStart.current.time;
+    const minDistance = 50;
+    if (dt > 450 || Math.abs(dx) < minDistance || Math.abs(dx) < Math.abs(dy)) return;
+    const currentIndex = categories.indexOf(selectedCategory);
+    if (currentIndex === -1) return;
+    if (dx < 0 && currentIndex < categories.length - 1) {
+      setSelectedCategory(categories[currentIndex + 1]);
+    } else if (dx > 0 && currentIndex > 0) {
+      setSelectedCategory(categories[currentIndex - 1]);
+    }
+    touchStart.current = null;
+  }, [categories, selectedCategory, setSelectedCategory]);
 
   const filteredItems = useMemo(() => {
     if (searchMode && searchQuery) {
@@ -1330,124 +1203,21 @@ export default function ManualOrderPage() {
         <div className="grid grid-cols-1 gap-6">
           {/* Items */}
           <div>
-            <div
-              className={`manual-order-grid grid gap-3 ${isPortrait ? 'grid-cols-2 md:grid-cols-3 xl:grid-cols-4' : ''}`}
-              style={isPortrait ? undefined : { gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}
-              onKeyDown={handleGridKeyDown}
-              onTouchStart={(event) => {
-                if (event.touches.length !== 1) return;
-                const touch = event.touches[0];
-                touchStart.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
-              }}
-              onTouchEnd={(event) => {
-                if (!touchStart.current || event.changedTouches.length !== 1) return;
-                const touch = event.changedTouches[0];
-                const dx = touch.clientX - touchStart.current.x;
-                const dy = touch.clientY - touchStart.current.y;
-                const dt = Date.now() - touchStart.current.time;
-                const minDistance = 50;
-                if (dt > 450 || Math.abs(dx) < minDistance || Math.abs(dx) < Math.abs(dy)) return;
-                const currentIndex = categories.indexOf(selectedCategory);
-                if (currentIndex === -1) return;
-                if (dx < 0 && currentIndex < categories.length - 1) {
-                  setSelectedCategory(categories[currentIndex + 1]);
-                } else if (dx > 0 && currentIndex > 0) {
-                  setSelectedCategory(categories[currentIndex - 1]);
-                }
-                touchStart.current = null;
-              }}
-            >
-              {filteredItems.map((item, idx, arr) => {
-                      const inStock = item.inStock !== false; // default to true
-                      // For portrait, 2 cards per row
-                      const rowIdx = getRowIndex(idx, 2);
-                      const details = getOfferDetails(item, offers, menuData);
-                      const longText = isLongOfferText(details);
-                      // If expandedOffer is this item and text is long, expand the row
-                      const isRowTall = isPortrait && expandedRow === rowIdx && longText;
-                      // When star is clicked, set expandedOffer and expandedRow
-                      const handleExpand = (name) => {
-                        setExpandedOffer(name);
-                        if (name === item.name && longText) setExpandedRow(rowIdx);
-                        else setExpandedRow(null);
-                      };
-                      const paddingClass = isPortrait ? 'p-2.5 sm:p-3' : 'p-2 sm:p-2';
-                      const heightClass = !isPortrait && !isRowTall ? 'min-h-[118px]' : '';
-                      const borderClasses = inStock
-                        ? 'border-orange-500 sm:border-orange-500 hover:border-black focus:border-black focus-visible:border-black'
-                        : 'border-gray-300 sm:border-gray-400';
-                      const cardClasses = `manual-order-card rounded-lg bg-gray-50 ${paddingClass} shadow-sm hover:shadow transition-shadow flex flex-col transform origin-top-left scale-[0.90] sm:scale-100 border-2 ${borderClasses} hover:bg-black/5 focus:bg-black/5 relative ${heightClass}`;
-                      const cardStyle = isRowTall ? { minHeight: 220 } : undefined;
-                      return (
-                        <div
-                          key={item.name}
-                          className={cardClasses}
-                          role="button"
-                          tabIndex={inStock ? 0 : -1}
-                          onClick={(event) => {
-                            if (!inStock) return;
-                            const target = event.target;
-                            if (target instanceof HTMLElement && target.closest('button')) return;
-                            addToCart(item);
-                          }}
-                          onKeyDown={(event) => {
-                            if (!inStock) return;
-                            // If cart sheet is open, treat Enter as place-order and avoid
-                            // adding items via keyboard to prevent conflicts.
-                            if (cartSheetOpen) return;
-                            if (event.target instanceof HTMLElement && event.target.closest('button')) return;
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              addToCart(item);
-                            }
-                          }}
-                          onFocus={(e) => {
-                            try { e.currentTarget.classList.add('keyboard-focused'); } catch (err) {}
-                          }}
-                          onBlur={(e) => {
-                            try { e.currentTarget.classList.remove('keyboard-focused'); } catch (err) {}
-                          }}
-                          style={cardStyle}
-                        >
-                          {/* O/A badge if offer available */}
-                          {offerItems.has(item.name) && (
-                            <OfferBadge item={item} offersJson={offers} menuData={menuData} onExpand={handleExpand} isExpanded={expandedOffer === item.name} isTall={isRowTall} />
-                          )}
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <h3 className="text-[1.05rem] font-semibold text-black leading-snug sm:text-[1.25rem]">{item.name}</h3>
-                              <p className="text-[1.05rem] font-semibold text-gray-800 leading-snug sm:text-[1.25rem]">₹{item.price}</p>
-                            </div>
-                          </div>
-                          <div className="mt-2 pt-1 flex-1 flex items-end justify-between">
-                            <span className="text-xs text-gray-500 font-semibold align-bottom">
-                              {!inStock ? 'N/A' : ''}
-                            </span>
-                            <button
-                              disabled={!inStock}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (inStock) addToCart(item);
-                              }}
-                              onKeyDown={(e) => {
-                                  if (cartSheetOpen) { e.stopPropagation(); return; }
-                                  if (e.key === 'Enter' && inStock) {
-                                    e.preventDefault();
-                                    addToCart(item);
-                                  }
-                                  e.stopPropagation();
-                                }}
-                              className={`inline-flex items-center justify-center rounded-full shadow-sm text-[1.1rem] h-[38px] w-[38px] sm:h-[48px] sm:w-[48px] sm:text-[1.25rem] ${inStock ? 'bg-orange-500 text-white hover:bg-orange-600 focus:ring-2 focus:ring-orange-300' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
-                              title={inStock ? "Add to Cart" : "Unavailable"}
-                              aria-label={inStock ? `Add ${item.name}` : "Unavailable"}
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      );
-          })}
-            </div>
+            <ItemsGrid
+              filteredItems={filteredItems}
+              isPortrait={isPortrait}
+              offerItems={offerItems}
+              expandedOffer={expandedOffer}
+              menuData={menuData}
+              offers={offers}
+              cartSheetOpen={cartSheetOpen}
+              onAddToCart={addToCart}
+              onExpandOffer={setExpandedOffer}
+              onGridKeyDown={handleGridKeyDown}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+              cardStyles={filteredItems.map(() => ({}))}
+            />
           </div>
 
           {/* Removed old sidebar cart; cart is now in bottom sheet */}
