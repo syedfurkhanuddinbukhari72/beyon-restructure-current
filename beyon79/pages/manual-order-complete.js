@@ -7,6 +7,8 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { getMenu, getOffersRules, upsertLocalOrder } from "../src/localDataService";
 import ItemsGrid from '../components/manual-order/ItemsGrid';
+import CartSheet from '../components/manual-order/CartSheet';
+import BillModal from '../components/manual-order/BillModal';
 import { getOfferDetails, hasOffer, getActiveDiscountOfferForItem, computeBillData, getRowIndex, isLongOfferText, getOfferItems } from '../utils/manualOrderHelpers';
 
 const CART_DRAFT_KEY = "manualOrder:cartDraft";
@@ -513,6 +515,140 @@ export default function ManualOrderPage() {
 
     return sum;
   }, [cart, menuData, offers]);
+
+  const cartItems = useMemo(() => {
+    const rewardsByOffer = {};
+    for (const it of cart) {
+      if (it.isOfferReward) {
+        (rewardsByOffer[it.offerId] = rewardsByOffer[it.offerId] || []).push(it);
+      }
+    }
+
+    const items = [];
+    cart
+      .filter((it) => !it.isOfferReward)
+      .forEach((item, idx) => {
+        const discountOffer = getActiveDiscountOfferForItem(item, menuData, offers);
+        let discount = 0;
+        let discountedPrice = item.price;
+        let offerLabel = null;
+        if (discountOffer) {
+          const { type, amount } = discountOffer;
+          if (type === "percent") {
+            discount = Math.round((item.price * amount) / 100);
+            discountedPrice = item.price - discount;
+            offerLabel = `${amount}% off`;
+          } else if (type === "flat") {
+            discount = amount;
+            discountedPrice = item.price - discount;
+            offerLabel = `₹${amount} off`;
+          }
+          if (discountedPrice < 0) discountedPrice = 0;
+        }
+
+        const linkedOffers = offers.filter(o => o.active && o.type === 'buy_x_get_y' && o.base?.match?.name === item.name);
+
+        let groupsConsumedTotal = 0;
+        const rewardDisplays = [];
+        for (const ofr of linkedOffers) {
+          const rewardEntries = rewardsByOffer[ofr.id] || [];
+          const totalAppliedRewards = rewardEntries.reduce((s, r) => s + (r.quantity || 0), 0);
+          const perRewardQty = ofr.reward?.items?.[0]?.quantity || 1;
+          const req = ofr.base?.quantity || 1;
+          const groupsConsumed = Math.floor(totalAppliedRewards / perRewardQty) * req;
+          groupsConsumedTotal += groupsConsumed;
+          for (const r of rewardEntries) {
+            rewardDisplays.push(`${r.quantity} x ${r.name} @ ₹${r.offerPrice ?? 0}`);
+          }
+        }
+
+        const consumed = Math.min(item.quantity || 0, groupsConsumedTotal);
+        const leftover = Math.max(0, (item.quantity || 0) - consumed);
+
+        const hasItemOffer = hasOffer(item, offers, menuData);
+
+        if (consumed > 0) {
+          let rewardUnitPrice = 0;
+          let rewardCount = 0;
+          for (const ofr of linkedOffers) {
+            const rewardEntries = rewardsByOffer[ofr.id] || [];
+            const totalAppliedRewards = rewardEntries.reduce((s, r) => s + (r.quantity || 0), 0);
+            rewardCount += totalAppliedRewards;
+            const rewardDef = ofr.reward?.items?.[0];
+            if (!rewardUnitPrice && rewardDef && typeof rewardDef.price === 'number') {
+              rewardUnitPrice = rewardDef.price;
+            }
+          }
+          const chargeAmount = (rewardUnitPrice || 0) * (rewardCount || 0);
+
+          items.push({
+            key: `group-${idx}`,
+            className: `py-2 flex items-center justify-between gap-2 ${hasItemOffer ? 'border-l-4 border-yellow-500 bg-yellow-50' : ''}`,
+            name: item.name,
+            isConsumed: true,
+            isReward: false,
+            rewardDisplays,
+            discount: 0,
+            offerLabel: null,
+            originalPrice: item.price,
+            discountedPrice,
+            quantity: consumed,
+            price: discountedPrice,
+            chargeAmount,
+            onDecrease: () => changeQty(item.name, -1),
+            onIncrease: () => changeQty(item.name, 1),
+            onRemove: () => changeQty(item.name, -consumed),
+          });
+        }
+
+        if (leftover > 0) {
+          items.push({
+            key: `leftover-${idx}`,
+            className: `py-2 flex items-center justify-between gap-2 ${hasItemOffer ? '' : ''}`,
+            name: item.name,
+            isConsumed: false,
+            isReward: false,
+            rewardDisplays: [],
+            discount,
+            offerLabel,
+            originalPrice: item.price,
+            discountedPrice,
+            quantity: leftover,
+            price: discountedPrice,
+            chargeAmount: 0,
+            onDecrease: () => changeQty(item.name, -1),
+            onIncrease: () => changeQty(item.name, 1),
+            onRemove: () => changeQty(item.name, -leftover),
+          });
+        }
+
+        for (const ofr of linkedOffers) {
+          const rewardEntries = rewardsByOffer[ofr.id] || [];
+          for (const r of rewardEntries) {
+            items.push({
+              key: `reward-${ofr.id}-${r.name}-${idx}`,
+              className: "py-2 pl-6 flex items-center justify-between gap-2 bg-green-50",
+              name: r.name,
+              isConsumed: false,
+              isReward: true,
+              rewardDisplays: [],
+              discount: 0,
+              offerLabel: null,
+              originalPrice: r.price,
+              discountedPrice: r.price,
+              quantity: r.quantity,
+              price: r.price,
+              chargeAmount: 0,
+              offerPrice: r.offerPrice,
+              onDecrease: () => changeQtyForReward(r.name, ofr.id, -1),
+              onIncrease: () => changeQtyForReward(r.name, ofr.id, 1),
+              onRemove: () => removeFromCart(r),
+            });
+          }
+        }
+      });
+    return items;
+  }, [cart, menuData, offers, changeQty, changeQtyForReward, removeFromCart]);
 
   // Load latest saved order from localStorage — hydrate cart only after offers have loaded
   useEffect(() => {
@@ -1263,399 +1399,71 @@ export default function ManualOrderPage() {
         </button>
       </nav>
 
-      {/* Manual Cart Bottom Sheet (separate from customer cart) */}
-      {cartSheetOpen && (
-        <div key={`cart-${dataVersion}`} className="fixed inset-0 z-[60]" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setCartSheetOpen(false)} />
-          <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl shadow-2xl p-4 pt-3" style={{ maxHeight: '85vh' }}>
-            {/* <div className="h-1.5 w-10 bg-gray-300 rounded-full mx-auto mb-3" /> */}
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="font-semibold text-lg text-black">Manual Order Cart</h2>
-              <button onClick={() => setCartSheetOpen(false)} className="text-gray-500 hover:text-gray-700 p-1" aria-label="Close">✕</button>
-            </div>
+      <CartSheet
+        open={cartSheetOpen}
+        cartItems={cartItems}
+        totalAmount={totalAmount}
+        customerName={customerName}
+        customerNumber={customerNumber}
+        note={note}
+        placing={placing}
+        resultMsg={resultMsg}
+        onChangeCustomerName={setCustomerName}
+        onChangeCustomerNumber={setCustomerNumber}
+        onChangeNote={setNote}
+        onClearCart={clearCart}
+        onPlaceOrder={placeOrder}
+        onClose={() => setCartSheetOpen(false)}
+      />
 
-            {/* Customer Info (moved from old sidebar) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-              <input
-                className="border border-gray-300 focus:border-orange-400 focus:ring-0 outline-none p-2 rounded text-black placeholder:text-gray-400"
-                placeholder="Customer Name (optional)"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-              />
-              <input
-                className="border border-gray-300 focus:border-orange-400 focus:ring-0 outline-none p-2 rounded text-black placeholder:text-gray-400"
-                placeholder="Phone Number (optional)"
-                value={customerNumber}
-                onChange={(e) => setCustomerNumber(e.target.value)}
-              />
-              <input
-                className="sm:col-span-2 border border-gray-300 focus:border-orange-400 focus:ring-0 outline-none p-2 rounded text-black placeholder:text-gray-400"
-                placeholder="Note (optional)"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-              />
-            </div>
+      <BillModal
+        open={billOpen}
+        billRef={billRef}
+        billData={selectedBillData}
+        billSource={billSource}
+        paperFormat={paperFormat}
+        downloading={downloading}
+        onChangeBillSource={setBillSource}
+        onChangePaperFormat={setPaperFormat}
+        onDownload={async () => {
+          setDownloading(true);
+          try {
+            const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
+            const node = billRef.current || document.querySelector('.printable-bill');
+            if (!node) throw new Error('Bill element not found');
+            const canvas = await html2canvas(node, { scale: 2, useCORS: true });
+            const imgData = canvas.toDataURL('image/png');
 
-            {/* Cart Items in Sheet (scrollable) */}
-            <div style={{ maxHeight: '38vh', overflowY: 'auto', marginBottom: '1rem' }} className="hide-scrollbar">
-      <style jsx global>{`
-        .hide-scrollbar {
-          scrollbar-width: none; /* Firefox */
-          -ms-overflow-style: none; /* IE 10+ */
-          overscroll-behavior: contain; /* Prevent scroll chaining */
-        }
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none; /* Chrome/Safari/Webkit */
-        }
-      `}</style>
-              {cart.length === 0 ? (
-                <p className="text-gray-500 py-4 text-center">No items added.</p>
-              ) : (
-                <ul className="divide-y divide-gray-200">
-                  {(() => {
-                    // Group rewards by offerId for quick lookup
-                    const rewardsByOffer = {};
-                    for (const it of cart) {
-                      if (it.isOfferReward) {
-                        (rewardsByOffer[it.offerId] = rewardsByOffer[it.offerId] || []).push(it);
-                      }
-                    }
-
-                    // Render only non-reward base items; when offers consume groups, show grouped (consumed) portion with reward info and leftover as a separate normal line
-                    return cart
-                      .filter((it) => !it.isOfferReward)
-                      .flatMap((item, idx) => {
-                        const discountOffer = getActiveDiscountOfferForItem(item, menuData, offers);
-                        let discount = 0;
-                        let discountedPrice = item.price;
-                        let offerLabel = null;
-                        if (discountOffer) {
-                          const { type, amount } = discountOffer;
-                          if (type === "percent") {
-                            discount = Math.round((item.price * amount) / 100);
-                            discountedPrice = item.price - discount;
-                            offerLabel = `${amount}% off`;
-                          } else if (type === "flat") {
-                            discount = amount;
-                            discountedPrice = item.price - discount;
-                            offerLabel = `₹${amount} off`;
-                          }
-                          if (discountedPrice < 0) discountedPrice = 0;
-                        }
-
-                        // Find offers where this item is base
-                        const linkedOffers = offers.filter(o => o.active && o.type === 'buy_x_get_y' && o.base?.match?.name === item.name);
-
-                        // compute grouped consumption based on reward entries (so we don't double-charge)
-                        let groupsConsumedTotal = 0;
-                        const rewardDisplays = [];
-                        let rewardTotal = 0;
-                        for (const ofr of linkedOffers) {
-                          const rewardEntries = rewardsByOffer[ofr.id] || [];
-                          const totalAppliedRewards = rewardEntries.reduce((s, r) => s + (r.quantity || 0), 0);
-                          const perRewardQty = ofr.reward?.items?.[0]?.quantity || 1;
-                          const req = ofr.base?.quantity || 1;
-                          const groupsConsumed = Math.floor(totalAppliedRewards / perRewardQty) * req;
-                          groupsConsumedTotal += groupsConsumed;
-                          for (const r of rewardEntries) {
-                            rewardDisplays.push(`${r.quantity} x ${r.name} @ ₹${r.offerPrice ?? 0}`);
-                            rewardTotal += (r.offerPrice ?? 0) * (r.quantity || 0);
-                          }
-                        }
-
-                        const consumed = Math.min(item.quantity || 0, groupsConsumedTotal);
-                        const leftover = Math.max(0, (item.quantity || 0) - consumed);
-
-                        const hasItemOffer = hasOffer(item, offers, menuData);
-
-                        const nodes = [];
-
-                        // If some groups were consumed by offers, render a highlighted grouped line showing only the consumed quantity
-                          if (consumed > 0) {
-                            // Compute how many reward units are applied and the reward unit price.
-                            // The charge for the consumed group is rewardUnitPrice * rewardCount.
-                            let rewardUnitPrice = 0;
-                            let rewardCount = 0;
-                            for (const ofr of linkedOffers) {
-                              const rewardEntries = rewardsByOffer[ofr.id] || [];
-                              const totalAppliedRewards = rewardEntries.reduce((s, r) => s + (r.quantity || 0), 0);
-                              rewardCount += totalAppliedRewards;
-                              const rewardDef = ofr.reward?.items?.[0];
-                              if (!rewardUnitPrice && rewardDef && typeof rewardDef.price === 'number') {
-                                rewardUnitPrice = rewardDef.price;
-                              }
-                            }
-                            const chargeAmount = (rewardUnitPrice || 0) * (rewardCount || 0);
-
-                            nodes.push(
-                              <li key={`group-${idx}`} className={`py-2 flex items-center justify-between gap-2 ${hasItemOffer ? 'border-l-4 border-yellow-500 bg-yellow-50' : ''}`}>
-                                <div className="min-w-0 flex flex-col gap-0.5">
-                                  <span className="text-sm font-medium text-gray-800 truncate flex items-center gap-1">
-                                    {item.name}
-                                    <span className="ml-2 text-yellow-600 text-xs font-semibold">Offer Applied</span>
-                                  </span>
-                                  {rewardDisplays.length > 0 && (
-                                    <div className="text-xs text-green-700 font-semibold" style={{ maxWidth: 360 }}>
-                                      <div style={{ maxHeight: 48, overflow: 'auto', whiteSpace: 'normal', lineHeight: '1.15', paddingRight: 6 }}>
-                                        {`Reward: ${rewardDisplays.join(', ')}`}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300"
-                                    onClick={() => changeQty(item.name, -1)}
-                                    aria-label="Decrease"
-                                    title="Decrease"
-                                  >
-                                    −
-                                  </button>
-                                  <span className="w-6 text-center text-sm font-semibold text-black">{consumed}</span>
-                                  <button
-                                    className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-orange-500 text-black hover:bg-orange-600"
-                                    onClick={() => changeQty(item.name, 1)}
-                                    aria-label="Increase"
-                                    title="Increase"
-                                  >
-                                    +
-                                  </button>
-                                  <div className="w-36 text-right text-sm text-black">
-                                    <div className="text-sm font-semibold">Consumed: {consumed}</div>
-                                    <div className="text-sm text-orange-500 font-semibold">Offer charge: ₹{chargeAmount}</div>
-                                  </div>
-                                  <button className="h-7 w-7 inline-flex items-center justify-center rounded-full border border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-300 ml-1" onClick={() => changeQty(item.name, -consumed)} aria-label={`Remove ${item.name}`}>×</button>
-                                </div>
-                              </li>
-                            );
-                          }
-
-                        // If there is leftover quantity, render a normal base line for the leftover units
-                        if (leftover > 0) {
-                          nodes.push(
-                            <li key={`leftover-${idx}`} className={`py-2 flex items-center justify-between gap-2 ${hasItemOffer ? '' : ''}`}>
-                              <div className="min-w-0 flex flex-col gap-0.5">
-                                <span className="text-sm font-medium text-gray-800 truncate flex items-center gap-1">{item.name}</span>
-                                {discount > 0 && (
-                                  <span className="text-xs text-green-700 font-semibold">{offerLabel}: <span className="line-through text-gray-400">₹{item.price}</span> <span className="ml-1">₹{discountedPrice}</span> <span className="ml-1 text-gray-500">(Saved ₹{discount})</span></span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300"
-                                  onClick={() => changeQty(item.name, -1)}
-                                  aria-label="Decrease"
-                                  title="Decrease"
-                                >
-                                  −
-                                </button>
-                                <span className="w-6 text-center text-sm font-semibold text-black">{leftover}</span>
-                                <button
-                                  className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-orange-500 text-black hover:bg-orange-600"
-                                  onClick={() => changeQty(item.name, 1)}
-                                  aria-label="Increase"
-                                  title="Increase"
-                                >
-                                  +
-                                </button>
-                                <span className="w-14 text-right text-sm text-black font-semibold">₹{discountedPrice * leftover}</span>
-                                <button
-                                  className="h-7 w-7 inline-flex items-center justify-center rounded-full border border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-300 ml-1"
-                                  onClick={() => changeQty(item.name, -leftover)}
-                                  aria-label={`Remove ${item.name}`}
-                                  title="Remove"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            </li>
-                          );
-                        }
-
-                        // Append explicit reward rows for any reward entries tied to the offers
-                        for (const ofr of linkedOffers) {
-                          const rewardEntries = rewardsByOffer[ofr.id] || [];
-                          for (const r of rewardEntries) {
-                            nodes.push(
-                              <li key={`reward-${ofr.id}-${r.name}-${idx}`} className="py-2 pl-6 flex items-center justify-between gap-2 bg-green-50">
-                                <div className="min-w-0 flex flex-col gap-0.5">
-                                  <span className="text-sm font-medium text-green-800 truncate flex items-center gap-1">
-                                    {r.name}
-                                    <span className="ml-2 text-green-600 text-xs font-semibold">Free (Offer)</span>
-                                  </span>
-                                  <span className="text-xs text-green-700">{`Offer price: ₹${r.offerPrice ?? 0}`}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300" onClick={() => changeQtyForReward(r.name, ofr.id, -1)} aria-label="Decrease">−</button>
-                                  <span className="w-6 text-center text-sm font-semibold text-black">{r.quantity}</span>
-                                  <button className="h-7 w-7 inline-flex items-center justify-center rounded-full bg-orange-500 text-black hover:bg-orange-600" onClick={() => changeQtyForReward(r.name, ofr.id, 1)} aria-label="Increase">+</button>
-                                  <span className="w-14 text-right text-sm text-black font-semibold">₹{(r.offerPrice ?? 0) * (r.quantity || 0)}</span>
-                                  <button className="h-7 w-7 inline-flex items-center justify-center rounded-full border border-red-300 text-red-600 hover:bg-red-50 ml-1" onClick={() => removeFromCart(r)} aria-label={`Remove ${r.name}`}>×</button>
-                                </div>
-                              </li>
-                            );
-                          }
-                        }
-
-                        return nodes;
-                      });
-                  })()}
-                </ul>
-              )}
-            </div>
-
-            {/* Cart Controls in Sheet (sticky) */}
-            <div style={{ position: 'sticky', bottom: 0, background: 'white', paddingTop: 12, paddingBottom: 8, zIndex: 2 }} className="flex justify-between items-center gap-2 border-t border-gray-200">
-              <span className="font-bold text-black">Total: ₹{totalAmount}</span>
-              <div className="flex gap-2">
-                <button
-                  className="bg-gray-200 text-gray-800 hover:bg-gray-300 px-3 py-1.5 rounded-md"
-                  onClick={clearCart}
-                >
-                  Clear
-                </button>
-                <button
-                  disabled={placing}
-                  className={`px-4 py-1.5 rounded-md text-white ${placing ? 'bg-orange-300' : 'bg-orange-500 hover:bg-orange-600'}`}
-                  onClick={async () => { await placeOrder(); setCartSheetOpen(false); }}
-                >
-                  {placing ? 'Placing...' : 'Place Order'}
-                </button>
-              </div>
-            </div>
-
-            {/* Result/Error Message */}
-            {resultMsg && (
-              <p
-                className={`text-sm mt-2 ${
-                  resultMsg.startsWith('✅')
-                    ? 'text-green-700'
-                    : resultMsg.startsWith('⚠️')
-                    ? 'text-yellow-700'
-                    : 'text-red-700'
-                }`}
-              >
-                {resultMsg}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Bill Preview Modal */}
-      {billOpen && (
-        <div key={`bill-${dataVersion}-${cart.length}`} className="fixed inset-0 z-[70] flex items-end md:items-center justify-center" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setBillOpen(false)} />
-          <div ref={billRef} className={`printable-bill ${paperFormat === 'thermal-80' ? 'thermal-80' : paperFormat === 'a4' ? 'a4' : ''} relative w-full md:w-[540px] max-h-[90vh] bg-white rounded-t-2xl md:rounded-lg shadow-2xl overflow-auto p-4`} style={{ borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="font-semibold text-lg text-orange-500">Bill Preview</h3>
-                <div className="text-xs text-gray-500">{new Date().toLocaleString()}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-2 text-xs text-gray-600">
-                  <span className="hidden sm:inline">Source:</span>
-                  <select value={billSource} onChange={(e) => setBillSource(e.target.value)} className="border border-gray-200 rounded px-2 py-1 text-sm bg-white">
-                    <option value="cart">Current Cart</option>
-                    <option value="latest">Latest Saved</option>
-                  </select>
-                </label>
-                <label className="flex items-center gap-2 text-xs text-gray-600">
-                  <span className="hidden sm:inline">Paper:</span>
-                  <select value={paperFormat} onChange={(e) => setPaperFormat(e.target.value)} className="border border-gray-200 rounded px-2 py-1 text-sm bg-white">
-                    <option value="auto">Auto</option>
-                    <option value="thermal-80">Thermal 80mm</option>
-                    <option value="a4">A4</option>
-                  </select>
-                </label>
-                <button className="px-3 py-1 rounded bg-gray-100 text-sm" onClick={() => setBillOpen(false)}>Close</button>
-                <button className="px-3 py-1 rounded bg-gray-100 text-sm" onClick={() => { window.print(); }}>Print</button>
-                <button className="px-3 py-1 rounded bg-green-600 text-white" onClick={async () => {
-                  setDownloading(true);
-                  try {
-                    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
-                    const node = billRef.current || document.querySelector('.printable-bill');
-                    if (!node) throw new Error('Bill element not found');
-                    const canvas = await html2canvas(node, { scale: 2, useCORS: true });
-                    const imgData = canvas.toDataURL('image/png');
-
-                    // If thermal 80mm selected, create PDF with mm units and width 80mm
-                    if (paperFormat === 'thermal-80') {
-                      const widthMm = 80; // target width
-                      // convert canvas px height to mm (assume 96 DPI for conversion)
-                      const pxToMm = (px) => (px * 25.4) / 96;
-                      const heightMm = Math.max(30, Math.round(pxToMm(canvas.height)));
-                      const pdf = new jsPDF({ unit: 'mm', format: [widthMm, heightMm] });
-                      pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm);
-                      pdf.save(`bill-${Date.now()}.pdf`);
-                    } else if (paperFormat === 'a4') {
-                      // For A4, create PDF at canvas px size (safer) — jsPDF accepts px if unit 'px'
-                      const pdf = new jsPDF({ unit: 'px', format: [canvas.width, canvas.height] });
-                      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-                      pdf.save(`bill-${Date.now()}.pdf`);
-                    } else {
-                      // Auto/default: preserve canvas pixel dimensions
-                      const pdf = new jsPDF({ unit: 'px', format: [canvas.width, canvas.height] });
-                      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-                      pdf.save(`bill-${Date.now()}.pdf`);
-                    }
-                  } catch (e) {
-                    console.error('Download PDF error', e);
-                    alert('Could not generate PDF: ' + (e.message || e));
-                  } finally {
-                    setDownloading(false);
-                  }
-                }}>{downloading ? 'Working...' : 'Download PDF'}</button>
-              </div>
-            </div>
-
-            <div className="divide-y divide-gray-200">
-              <div className="pb-3">
-                {selectedBillData.lines.map((l, i) => (
-                  <div key={i} className="flex items-center justify-between py-2">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-gray-800 truncate">{l.desc}</div>
-                      <div className="text-xs text-gray-500">{l.isOfferReward ? 'Offer Reward' : l.isOfferConsumed ? 'Consumed by offer' : ''}</div>
-                    </div>
-                    <div className="text-right ml-2 min-w-[90px]">
-                      {l.isOfferConsumed ? (
-                        <div className="text-sm text-orange-500 font-semibold">₹{l.displayAmount ?? 0}</div>
-                      ) : (
-                        <>
-                          <div className="text-sm font-semibold">{l.qty} × ₹{l.unitPrice}</div>
-                          <div className="text-sm text-orange-500 font-semibold">₹{l.amount}</div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="pt-3">
-                <div className="flex items-center justify-between py-1"><span className="text-sm text-gray-600">Subtotal</span><span className="font-semibold">₹{selectedBillData.subtotal}</span></div>
-                {/* Placeholder: taxes/discounts */}
-                <div className="flex items-center justify-between py-1"><span className="text-sm text-orange-500">Total</span><span className="font-bold text-lg text-orange-500">₹{selectedBillData.total}</span></div>
-              </div>
-            </div>
-            <style jsx>{`
-              /* Print helpers and format-specific styles */
-              .printable-bill.thermal-80 { width: 80mm; max-width: 100%; }
-              .printable-bill.a4 { width: 210mm; max-width: 100%; }
-
-              @page thermal80 { size: 80mm auto; margin: 6mm; }
-              @page a4 { size: A4; margin: 10mm; }
-
-              @media print {
-                body * { visibility: hidden; }
-                .printable-bill, .printable-bill * { visibility: visible; }
-                .printable-bill { position: absolute; left: 0; top: 0; width: 100%; }
-                /* If thermal class present, prefer narrow page size */
-                .printable-bill.thermal-80 { box-shadow: none; border-radius: 0; }
-              }
-            `}</style>
-          </div>
-        </div>
-      )}
+            // If thermal 80mm selected, create PDF with mm units and width 80mm
+            if (paperFormat === 'thermal-80') {
+              const widthMm = 80; // target width
+              // convert canvas px height to mm (assume 96 DPI for conversion)
+              const pxToMm = (px) => (px * 25.4) / 96;
+              const heightMm = Math.max(30, Math.round(pxToMm(canvas.height)));
+              const pdf = new jsPDF({ unit: 'mm', format: [widthMm, heightMm] });
+              pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm);
+              pdf.save(`bill-${Date.now()}.pdf`);
+            } else if (paperFormat === 'a4') {
+              // For A4, create PDF at canvas px size (safer) — jsPDF accepts px if unit 'px'
+              const pdf = new jsPDF({ unit: 'px', format: [canvas.width, canvas.height] });
+              pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+              pdf.save(`bill-${Date.now()}.pdf`);
+            } else {
+              // Auto/default: preserve canvas pixel dimensions
+              const pdf = new jsPDF({ unit: 'px', format: [canvas.width, canvas.height] });
+              pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+              pdf.save(`bill-${Date.now()}.pdf`);
+            }
+          } catch (e) {
+            console.error('Download PDF error', e);
+            alert('Could not generate PDF: ' + (e.message || e));
+          } finally {
+            setDownloading(false);
+          }
+        }}
+        onPrint={() => { window.print(); }}
+        onClose={() => setBillOpen(false)}
+      />
     </div>
   );
   // Keyboard shortcuts for cart when open
