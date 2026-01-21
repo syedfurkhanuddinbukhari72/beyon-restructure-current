@@ -13,7 +13,7 @@ const BillModal = ({
   onPrint,
   onClose,
 }) => {
-  if (!open) return null;
+  if (!open || !billData || !Array.isArray(billData.lines)) return null;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center" role="dialog" aria-modal="true">
@@ -48,7 +48,7 @@ const BillModal = ({
 
         <div className="divide-y divide-gray-200">
           <div className="pb-3">
-            {billData.lines.map((l, i) => (
+            {billData && billData.lines ? billData.lines.map((l, i) => (
               <div key={i} className="flex items-center justify-between py-2">
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-gray-800 truncate">{l.desc}</div>
@@ -65,13 +65,15 @@ const BillModal = ({
                   )}
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="py-4 text-center text-gray-500">No bill data available</div>
+            )}
           </div>
 
           <div className="pt-3">
-            <div className="flex items-center justify-between py-1"><span className="text-sm text-gray-600">Subtotal</span><span className="font-semibold">₹{billData.subtotal}</span></div>
+            <div className="flex items-center justify-between py-1"><span className="text-sm text-gray-600">Subtotal</span><span className="font-semibold">₹{billData?.subtotal ?? 0}</span></div>
             {/* Placeholder: taxes/discounts */}
-            <div className="flex items-center justify-between py-1"><span className="text-sm text-orange-500">Total</span><span className="font-bold text-lg text-orange-500">₹{billData.total}</span></div>
+            <div className="flex items-center justify-between py-1"><span className="text-sm text-orange-500">Total</span><span className="font-bold text-lg text-orange-500">₹{billData?.total ?? 0}</span></div>
           </div>
         </div>
         <style jsx>{`

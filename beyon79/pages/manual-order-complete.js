@@ -9,7 +9,10 @@ import { getMenu, getOffersRules, upsertLocalOrder } from "../src/localDataServi
 import ItemsGrid from '../components/manual-order/ItemsGrid';
 import CartSheet from '../components/manual-order/CartSheet';
 import BillModal from '../components/manual-order/BillModal';
-import { getOfferDetails, hasOffer, getActiveDiscountOfferForItem, computeBillData, getRowIndex, isLongOfferText, getOfferItems } from '../utils/manualOrderHelpers';
+import { getOfferDetails, hasOffer, getActiveDiscountOfferForItem, getRowIndex, isLongOfferText, getOfferItems } from '../utils/manualOrderHelpers';
+import { useCartManagement } from '../hooks/useCartManagement';
+import { useSearchAndCategory } from '../hooks/useSearchAndCategory';
+import { useBillCalculation } from '../hooks/useBillCalculation';
 
 const CART_DRAFT_KEY = "manualOrder:cartDraft";
 const CART_META_KEY = "manualOrder:cartMeta";
@@ -27,15 +30,29 @@ export default function ManualOrderPage() {
   const lastMenuHashRef = useRef('');
   const lastOffersHashRef = useRef('');
   // Core UI state hooks stay grouped upfront to avoid temporal dead zones in effects
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [cart, setCart] = useState([]);
+  const {
+    selectedCategory,
+    searchMode,
+    searchQuery,
+    setSelectedCategory,
+    setSearchMode,
+    setSearchQuery,
+    filteredItems,
+  } = useSearchAndCategory({ menuData });
+  const {
+    cart,
+    setCart,
+    addToCart,
+    removeFromCart,
+    changeQty,
+    changeQtyForReward,
+    clearCart,
+  } = useCartManagement({ menuData, offers });
   const [customerName, setCustomerName] = useState("");
   const [customerNumber, setCustomerNumber] = useState("");
   const [note, setNote] = useState("");
   const [placing, setPlacing] = useState(false);
   const [resultMsg, setResultMsg] = useState("");
-  const [searchMode, setSearchMode] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
   const [focusedItemIdx, setFocusedItemIdx] = useState(null);
   const [billOpen, setBillOpen] = useState(false);
@@ -46,16 +63,16 @@ export default function ManualOrderPage() {
   const [latestSavedOrder, setLatestSavedOrder] = useState(null);
   const [billSource, setBillSource] = useState('cart'); // 'cart' or 'latest'
   const [dataVersion, setDataVersion] = useState(0); // Force re-render when data changes
+  const { totalAmount, billData: currentBillData, computeBillData } = useBillCalculation({ cart, menuData, offers });
   // Selected bill data (either current cart or latest saved order)
   const selectedBillData = useMemo(() => {
     console.log('[selectedBillData] Recalculating bill. Cart items:', cart?.length || 0, 'dataVersion:', dataVersion);
     if (billSource === 'latest' && latestSavedOrder && Array.isArray(latestSavedOrder.fullCart)) {
       return computeBillData(latestSavedOrder.fullCart || []);
     }
-    const billData = computeBillData(cart || []);
-    console.log('[selectedBillData] Bill total:', billData.total, 'lines:', billData.lines?.length || 0);
-    return billData;
-  }, [billSource, latestSavedOrder, cart, menuData, offers, dataVersion]);
+    console.log('[selectedBillData] Bill total:', currentBillData.total, 'lines:', currentBillData.lines?.length || 0);
+    return currentBillData;
+  }, [billSource, latestSavedOrder, currentBillData, computeBillData, dataVersion]);
   const mountedRef = useRef(true);
   const billRef = useRef(null);
   const categoryRefs = useRef({});
@@ -455,15 +472,7 @@ export default function ManualOrderPage() {
     touchStart.current = null;
   }, [categories, selectedCategory, setSelectedCategory]);
 
-  const filteredItems = useMemo(() => {
-    if (searchMode && searchQuery) {
-      return Object.values(menuData).flat().filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    } else {
-      return Object.entries(menuData)
-        .filter(([category]) => selectedCategory === "All" || selectedCategory === category)
-        .flatMap(([category, items]) => items);
-    }
-  }, [menuData, selectedCategory, searchMode, searchQuery]);
+
 
   useEffect(() => {
     function handleResize() {
@@ -473,48 +482,8 @@ export default function ManualOrderPage() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-  
-  const totalAmount = useMemo(() => {
-    const rewardsByOffer = {};
-    for (const it of cart) {
-      if (it.isOfferReward) {
-        (rewardsByOffer[it.offerId] = rewardsByOffer[it.offerId] || []).push(it);
-      }
-    }
 
-    let sum = 0;
-    for (const it of cart) {
-      if (it.isOfferReward) sum += (it.offerPrice ?? 0) * (it.quantity || 0);
-    }
 
-    const baseItems = cart.filter((it) => !it.isOfferReward);
-    for (const item of baseItems) {
-      const linkedOffers = (offers || []).filter(o => o.active && o.type === 'buy_x_get_y' && o.base?.match?.name === item.name);
-      let groupsConsumedTotal = 0;
-      for (const ofr of linkedOffers) {
-        const rewardEntries = rewardsByOffer[ofr.id] || [];
-        const totalAppliedRewards = rewardEntries.reduce((s, r) => s + (r.quantity || 0), 0);
-        const perRewardQty = ofr.reward?.items?.[0]?.quantity || 1;
-        const req = ofr.base?.quantity || 1;
-        const groupsConsumed = Math.floor(totalAppliedRewards / perRewardQty) * req;
-        groupsConsumedTotal += groupsConsumed;
-      }
-      const consumed = Math.min(item.quantity || 0, groupsConsumedTotal);
-      const leftover = Math.max(0, (item.quantity || 0) - consumed);
-
-      const discountOffer = getActiveDiscountOfferForItem(item, menuData, offers);
-      let discountedPrice = item.price;
-      if (discountOffer) {
-        const { type, amount } = discountOffer;
-        if (type === 'percent') discountedPrice = item.price - Math.round((item.price * amount) / 100);
-        else if (type === 'flat') discountedPrice = item.price - amount;
-        if (discountedPrice < 0) discountedPrice = 0;
-      }
-      sum += leftover * discountedPrice;
-    }
-
-    return sum;
-  }, [cart, menuData, offers]);
 
   const cartItems = useMemo(() => {
     const rewardsByOffer = {};
@@ -680,7 +649,7 @@ export default function ManualOrderPage() {
             }))
             .filter((item) => item.quantity > 0);
           if (sanitized.length > 0) {
-            setCart(syncOfferRewards(sanitized, offers));
+            setCart(sanitized);
           }
         }
       }
@@ -701,88 +670,7 @@ export default function ManualOrderPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offersLoaded]);
 
-  // Helper: compute bill data from an arbitrary cart snapshot
-  function computeBillData(cartSnapshot) {
-    const rewardsByOffer = {};
-    for (const it of (cartSnapshot || [])) {
-      if (it.isOfferReward) {
-        (rewardsByOffer[it.offerId] = rewardsByOffer[it.offerId] || []).push(it);
-      }
-    }
 
-    // sumCharge holds the actual charged total for reward lines
-    let sumCharge = 0;
-    for (const it of (cartSnapshot || [])) {
-      if (it.isOfferReward) sumCharge += (it.offerPrice ?? 0) * (it.quantity || 0);
-    }
-
-    const lines = [];
-
-    const baseItems = (cartSnapshot || []).filter((i) => !i.isOfferReward);
-    for (const item of baseItems) {
-      const linkedOffers = (offers || []).filter(o => o.active && o.type === 'buy_x_get_y' && o.base?.match?.name === item.name);
-      let groupsConsumedTotal = 0;
-      for (const ofr of linkedOffers) {
-        const rewardEntries = rewardsByOffer[ofr.id] || [];
-        const totalAppliedRewards = rewardEntries.reduce((s, r) => s + (r.quantity || 0), 0);
-        const perRewardQty = ofr.reward?.items?.[0]?.quantity || 1;
-        const req = ofr.base?.quantity || 1;
-        const groupsConsumed = Math.floor(totalAppliedRewards / perRewardQty) * req;
-        groupsConsumedTotal += groupsConsumed;
-      }
-      const consumed = Math.min(item.quantity || 0, groupsConsumedTotal);
-      const leftover = Math.max(0, (item.quantity || 0) - consumed);
-
-      if (consumed > 0) {
-        // For the bill/order summary only: compute rewardCount for linked offers and
-        // show consumed base items at the reward value (presentation-only).
-        let rewardUnitPrice = 0;
-        let rewardCount = 0;
-        for (const ofr of linkedOffers) {
-          const rewardEntries = rewardsByOffer[ofr.id] || [];
-          const totalAppliedRewards = rewardEntries.reduce((s, r) => s + (r.quantity || 0), 0);
-          rewardCount += totalAppliedRewards;
-          const rewardDef = ofr.reward?.items?.[0];
-          if (!rewardUnitPrice && rewardDef && typeof rewardDef.price === 'number') {
-            rewardUnitPrice = rewardDef.price;
-          }
-        }
-        // For display: show the reward unit price (single-value). The actual
-        // charged amount (for totals) is rewardCount * rewardUnitPrice and will
-        // be aggregated into sumCharge.
-        const displayAmount = (rewardUnitPrice || 0);
-        const consumedCharge = (rewardUnitPrice || 0) * Math.max(0, rewardCount || 0);
-        lines.push({ desc: `${item.name} (consumed by offer)`, qty: consumed, unitPrice: rewardUnitPrice, amount: displayAmount, displayAmount, chargeAmount: consumedCharge, isOfferConsumed: true });
-        sumCharge += consumedCharge;
-      }
-      if (leftover > 0) {
-        const discountOffer = getActiveDiscountOfferForItem(item, menuData, offers);
-        let unitPrice = item.price;
-        if (discountOffer) {
-          const { type, amount } = discountOffer;
-          if (type === 'percent') unitPrice = item.price - Math.round((item.price * amount) / 100);
-          else if (type === 'flat') unitPrice = item.price - amount;
-          if (unitPrice < 0) unitPrice = 0;
-        }
-        lines.push({ desc: item.name, qty: leftover, unitPrice, amount: unitPrice * leftover });
-        // Add leftover base charges to the charged subtotal
-        sumCharge += unitPrice * leftover;
-      }
-    }
-
-    // reward lines (show as Offer Reward entries). For the order summary we want these to
-    // appear but not add to the billed total (they are already represented on the consumed
-    // base lines above). So present them with unitPrice 0 and amount 0 while keeping
-    // the offerPrice available in the description if needed.
-    for (const r of (cartSnapshot || []).filter(i => i.isOfferReward)) {
-      const unitPrice = r.offerPrice ?? 0;
-      // Offer Reward lines are reference-only here and zero-charged.
-      lines.push({ desc: `${r.name} (Offer Reward)`, qty: r.quantity || 0, unitPrice: 0, amount: 0, chargeAmount: 0, isOfferReward: true, offerPrice: unitPrice });
-    }
-
-    const subtotal = sumCharge;
-    return { lines, subtotal, total: sumCharge };
-  }
 
 
   // Lock background scroll when cart sheet is open (must be after all useState)
@@ -812,200 +700,48 @@ export default function ManualOrderPage() {
     };
   }, []);
 
-  // ---------------- CART FUNCTIONS ----------------
-  // Sync buy_x_get_y reward items in cart: add/update/remove reward lines with price 0 and offerPrice
-  function syncOfferRewards(cartState, currentOffers) {
-    console.log('[syncOfferRewards] Called with cart length:', cartState?.length || 0, 'offers:', currentOffers?.length || 0);
-    if (!Array.isArray(cartState)) return [];
-    const next = [...cartState];
-    const activeBuyXGetY = (currentOffers || []).filter(o => o.active && o.type === 'buy_x_get_y');
-    console.log('[syncOfferRewards] Active Buy X Get Y offers:', activeBuyXGetY.length);
 
-    for (const offer of activeBuyXGetY) {
-      const baseName = offer.base?.match?.name;
-      const rewardDef = offer.reward?.items?.[0];
-      console.log(`[syncOfferRewards] Processing offer "${offer.name}": base=${baseName}, reward=${rewardDef?.name}`);
-      if (!baseName || !rewardDef) {
-        console.log('[syncOfferRewards] Skipping - missing base or reward');
-        continue;
-      }
 
-      const baseCount = next.reduce((s, it) => s + ((it.name === baseName && !it.isOfferReward) ? (it.quantity || 0) : 0), 0);
-      const perRewardQty = rewardDef.quantity || 1;
-      const possibleRewards = Math.floor(baseCount / (offer.base?.quantity || 1)) * perRewardQty;
-      const maxRewards = offer.limitPerOrder || possibleRewards;
-      const rewardsToApply = Math.min(possibleRewards, maxRewards);
-      console.log(`[syncOfferRewards] baseCount=${baseCount}, rewardsToApply=${rewardsToApply}`);
-
-      // find existing reward entries tied to this offer
-      let existingRewardIndex = next.findIndex((it) => it.isOfferReward && it.offerId === offer.id && it.name === rewardDef.name);
-      const existingQty = existingRewardIndex >= 0 ? (next[existingRewardIndex].quantity || 0) : 0;
-
-      if (rewardsToApply > 0) {
-        if (existingRewardIndex >= 0) {
-          // update quantity
-          console.log(`[syncOfferRewards] ✅ Updating existing reward: ${rewardDef.name} qty ${existingQty} → ${rewardsToApply}`);
-          next[existingRewardIndex] = { ...next[existingRewardIndex], quantity: rewardsToApply };
-        } else {
-          // add reward entry with price = 0 but keep offerPrice for display/total
-          console.log(`[syncOfferRewards] ✅ Adding NEW reward: ${rewardDef.name} qty ${rewardsToApply}`);
-          next.push({ name: rewardDef.name, quantity: rewardsToApply, price: 0, offerPrice: rewardDef.price ?? 0, isOfferReward: true, offerId: offer.id });
-        }
-      } else {
-        // remove existing reward entry if present
-        if (existingRewardIndex >= 0) {
-          console.log(`[syncOfferRewards] ❌ Removing reward: ${rewardDef.name}`);
-          next.splice(existingRewardIndex, 1);
-        }
-      }
-    }
-
-    console.log('[syncOfferRewards] Final cart length:', next.length);
-    return next;
-  }
-
-  // Re-sync offer rewards when offers change (e.g. admin updated offers)
-  useEffect(() => {
-    console.log('[useEffect:offers] Offers changed, syncing cart rewards. Offers count:', offers?.length || 0);
+  const handleDownload = async () => {
+    setDownloading(true);
     try {
-      setCart((prev) => {
-        console.log('[useEffect:offers] Syncing rewards for cart with', prev?.length || 0, 'items');
-        try {
-          const updated = syncOfferRewards(prev || [], offers);
-          if (updated.length !== prev?.length) {
-            console.log('[useEffect:offers] 🎉 Cart updated! Items:', prev?.length, '→', updated.length);
-          }
-          return updated;
-        } catch (e) {
-          console.warn('syncOfferRewards failed during offers update', e);
-          return prev || [];
-        }
-      });
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
+      const node = billRef.current || document.querySelector('.printable-bill');
+      if (!node) throw new Error('Bill element not found');
+      const canvas = await html2canvas(node, { scale: 2, useCORS: true });
+      const imgData = canvas.toDataURL('image/png');
+
+      // If thermal 80mm selected, create PDF with mm units and width 80mm
+      if (paperFormat === 'thermal-80') {
+        const widthMm = 80; // target width
+        // convert canvas px height to mm (assume 96 DPI for conversion)
+        const pxToMm = (px) => (px * 25.4) / 96;
+        const heightMm = Math.max(30, Math.round(pxToMm(canvas.height)));
+        const pdf = new jsPDF({ unit: 'mm', format: [widthMm, heightMm] });
+        pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm);
+        pdf.save(`bill-${Date.now()}.pdf`);
+      } else if (paperFormat === 'a4') {
+        // For A4, create PDF at canvas px size (safer) — jsPDF accepts px if unit 'px'
+        const pdf = new jsPDF({ unit: 'px', format: [canvas.width, canvas.height] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save(`bill-${Date.now()}.pdf`);
+      } else {
+        // Auto/default: preserve canvas pixel dimensions
+        const pdf = new jsPDF({ unit: 'px', format: [canvas.width, canvas.height] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save(`bill-${Date.now()}.pdf`);
+      }
     } catch (e) {
-      console.warn('Failed to re-sync offers on update', e);
+      console.error('Download PDF error', e);
+      alert('Could not generate PDF: ' + (e.message || e));
+    } finally {
+      setDownloading(false);
     }
-  }, [offers]);
+  };
 
-  // Update cart item prices when menuData changes (e.g., when discounts are applied)
-  useEffect(() => {
-    console.log('[manual-order-complete] Cart price sync effect triggered, menuData keys:', Object.keys(menuData).length);
-    if (!menuData || Object.keys(menuData).length === 0) {
-      console.log('[manual-order-complete] Skipping cart sync - no menu data');
-      return;
-    }
-    
-    setCart((prev) => {
-      console.log('[manual-order-complete] Checking cart for price updates, cart length:', prev.length);
-      if (!prev || prev.length === 0) return prev;
-      
-      let hasChanges = false;
-      const updated = prev.map((cartItem) => {
-        // Skip offer reward items - they have fixed offerPrice
-        if (cartItem.isOfferReward) return cartItem;
-        
-        // Find the current menu item price
-        let currentMenuItem = null;
-        for (const category in menuData) {
-          const found = menuData[category]?.find(item => item.name === cartItem.name);
-          if (found) {
-            currentMenuItem = found;
-            break;
-          }
-        }
-        
-        // Debug: Log price comparison for each item
-        if (currentMenuItem) {
-          console.log(`[cart-sync] ${cartItem.name}:`);
-          console.log(`  - Cart price: ₹${cartItem.price}`);
-          console.log(`  - Menu price: ₹${currentMenuItem.price}`);
-          console.log(`  - Menu originalPrice: ₹${currentMenuItem.originalPrice || 'N/A'}`);
-          console.log(`  - Prices match: ${currentMenuItem.price === cartItem.price}`);
-        } else {
-          console.log(`[cart-sync] ${cartItem.name}: NOT FOUND in menu`);
-        }
-        
-        // If item found in menu and price has changed, update it
-        if (currentMenuItem && currentMenuItem.price !== cartItem.price) {
-          console.log(`[manual-order-complete] ✅ Updating cart price for ${cartItem.name}: ₹${cartItem.price} → ₹${currentMenuItem.price}`);
-          hasChanges = true;
-          return { ...cartItem, price: currentMenuItem.price };
-        }
-        
-        return cartItem;
-      });
-      
-      // Only update if there were actual changes to prevent infinite loops
-      if (hasChanges) {
-        console.log('[manual-order-complete] ✅ Cart prices UPDATED - syncing offers now');
-        // Re-sync offers after price update
-        return syncOfferRewards(updated, offers);
-      }
-      
-      console.log('[manual-order-complete] No cart price changes detected');
-      return prev;
-    });
-  }, [menuData]);
+  const handlePrint = () => { window.print(); };
 
-  const addToCart = useCallback((item) => {
-    setCart((prev) => {
-      let next = [...prev];
-      const existing = next.find((i) => i.name === item.name && !i.isOfferReward);
-      if (existing) {
-        next = next.map((i) =>
-          i.name === item.name && !i.isOfferReward ? { ...i, quantity: i.quantity + 1 } : i
-        );
-      } else {
-        next.push({ ...item, quantity: 1 });
-      }
-      return syncOfferRewards(next, offers);
-    });
-  }, [offers]);
-
-  const removeFromCart = useCallback((item) => {
-    setCart((prev) => {
-      const next = prev.filter((i) => !(i.name === item.name && i.isOfferReward === item.isOfferReward && (item.offerId ? i.offerId === item.offerId : true)));
-      return syncOfferRewards(next, offers);
-    });
-  }, [offers]);
-
-  const clearCart = () => setCart([]);
-
-  const changeQty = useCallback((name, delta) => {
-    setCart((prev) => {
-      const exists = prev.find((i) => i.name === name && !i.isOfferReward);
-      if (!exists) {
-        // allow changing reward entries directly as well
-        const existsReward = prev.find((i) => i.name === name && i.isOfferReward);
-        if (!existsReward) return prev;
-        const newQty = (existsReward.quantity || 0) + delta;
-        const next = newQty <= 0 ? prev.filter((i) => i !== existsReward) : prev.map((i) => i === existsReward ? { ...i, quantity: newQty } : i);
-        return syncOfferRewards(next, offers);
-      }
-      const nextQty = (exists.quantity || 0) + delta;
-      let next;
-      if (nextQty <= 0) next = prev.filter((i) => !(i.name === name && !i.isOfferReward));
-      else next = prev.map((i) => (i.name === name && !i.isOfferReward ? { ...i, quantity: nextQty } : i));
-      return syncOfferRewards(next, offers);
-    });
-  }, [offers]);
-
-  // Adjust quantity for reward entries (match by name + offerId) safely
-  const changeQtyForReward = useCallback((name, offerId, delta) => {
-    setCart((prev) => {
-      const next = [...prev];
-      const idx = next.findIndex(i => i.name === name && i.isOfferReward && (offerId ? i.offerId === offerId : true));
-      if (idx === -1) return prev;
-      const newQty = (next[idx].quantity || 0) + delta;
-      if (newQty <= 0) {
-        next.splice(idx, 1);
-      } else {
-        next[idx] = { ...next[idx], quantity: newQty };
-      }
-      return syncOfferRewards(next, offers);
-    });
-  }, [offers]);
-
-  // ---------------- ORDER HANDLER ----------------
+// ---------------- ORDER HANDLER ----------------
   const placeOrder = async () => {
     if (placing) return; // Prevent double submit
     if (cart.length === 0) {
@@ -1416,6 +1152,7 @@ export default function ManualOrderPage() {
         onClose={() => setCartSheetOpen(false)}
       />
 
+      {/*
       <BillModal
         open={billOpen}
         billRef={billRef}
@@ -1425,45 +1162,11 @@ export default function ManualOrderPage() {
         downloading={downloading}
         onChangeBillSource={setBillSource}
         onChangePaperFormat={setPaperFormat}
-        onDownload={async () => {
-          setDownloading(true);
-          try {
-            const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
-            const node = billRef.current || document.querySelector('.printable-bill');
-            if (!node) throw new Error('Bill element not found');
-            const canvas = await html2canvas(node, { scale: 2, useCORS: true });
-            const imgData = canvas.toDataURL('image/png');
-
-            // If thermal 80mm selected, create PDF with mm units and width 80mm
-            if (paperFormat === 'thermal-80') {
-              const widthMm = 80; // target width
-              // convert canvas px height to mm (assume 96 DPI for conversion)
-              const pxToMm = (px) => (px * 25.4) / 96;
-              const heightMm = Math.max(30, Math.round(pxToMm(canvas.height)));
-              const pdf = new jsPDF({ unit: 'mm', format: [widthMm, heightMm] });
-              pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm);
-              pdf.save(`bill-${Date.now()}.pdf`);
-            } else if (paperFormat === 'a4') {
-              // For A4, create PDF at canvas px size (safer) — jsPDF accepts px if unit 'px'
-              const pdf = new jsPDF({ unit: 'px', format: [canvas.width, canvas.height] });
-              pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-              pdf.save(`bill-${Date.now()}.pdf`);
-            } else {
-              // Auto/default: preserve canvas pixel dimensions
-              const pdf = new jsPDF({ unit: 'px', format: [canvas.width, canvas.height] });
-              pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-              pdf.save(`bill-${Date.now()}.pdf`);
-            }
-          } catch (e) {
-            console.error('Download PDF error', e);
-            alert('Could not generate PDF: ' + (e.message || e));
-          } finally {
-            setDownloading(false);
-          }
-        }}
-        onPrint={() => { window.print(); }}
+        onDownload={handleDownload}
+        onPrint={handlePrint}
         onClose={() => setBillOpen(false)}
       />
+      */}
     </div>
   );
   // Keyboard shortcuts for cart when open
