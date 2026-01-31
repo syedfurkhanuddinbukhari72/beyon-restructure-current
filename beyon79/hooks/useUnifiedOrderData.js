@@ -13,7 +13,7 @@ export const useUnifiedOrderData = () => {
       try {
         const kotTabData = JSON.parse(localStorage.getItem('kotTabData') || '[]');
         console.log('🌉 BRIDGE: Found KOT data in localStorage:', kotTabData.length);
-        
+
         if (kotTabData.length > 0) {
           // Convert KOT data to order format and sync to localforage
           const kotOrders = kotTabData.map(kot => ({
@@ -39,11 +39,11 @@ export const useUnifiedOrderData = () => {
             estimatedTime: kot.estimatedTime,
             actualTime: kot.actualTime
           }));
-          
+
           // Get existing orders
           const existingOrders = await localData.getAllOrders();
           console.log('🌉 BRIDGE: Existing orders in localforage:', existingOrders.length);
-          
+
           // Merge orders - KOT orders take precedence
           const mergedOrders = [...existingOrders];
           kotOrders.forEach(kotOrder => {
@@ -54,7 +54,7 @@ export const useUnifiedOrderData = () => {
               mergedOrders.push(kotOrder); // Add new
             }
           });
-          
+
           // Save merged data to localforage
           await localData.saveAllOrders(mergedOrders);
           console.log('🌉 BRIDGE: Synced KOT data to localforage successfully');
@@ -102,15 +102,27 @@ export const useUnifiedOrderData = () => {
         kotCompleted: updates.kotCompleted,
         status: updates.status
       });
-      
+
+      // Optimistically update the status in local state for immediate UI feedback
+      const optimisticOrder = state.orders.find(o => o._id === orderId);
+      if (optimisticOrder) {
+        const optimisticUpdate = { ...optimisticOrder, ...updates };
+        console.log('⚡ Optimistic update:', {
+          orderId,
+          oldStatus: optimisticOrder.status,
+          newStatus: optimisticUpdate.status
+        });
+        dispatch({ type: 'UPDATE_ORDER', payload: optimisticUpdate });
+      }
+
       const updatedOrder = await localData.updateLocalOrderStatus(orderId, updates);
-      
+
       // REVERSE BRIDGE: Sync KOT updates back to localStorage
       if (updatedOrder && updatedOrder.source === 'kot') {
         try {
           const kotTabData = JSON.parse(localStorage.getItem('kotTabData') || '[]');
           const kotIndex = kotTabData.findIndex(kot => kot.id === updatedOrder.kotId || kot.id === updatedOrder._id);
-          
+
           if (kotIndex >= 0) {
             // Update KOT in localStorage
             kotTabData[kotIndex] = {
@@ -123,7 +135,7 @@ export const useUnifiedOrderData = () => {
               completedAt: updatedOrder.completedAt,
               actualTime: updatedOrder.actualTime
             };
-            
+
             localStorage.setItem('kotTabData', JSON.stringify(kotTabData));
             console.log('🌉 REVERSE BRIDGE: Updated KOT in localStorage:', updatedOrder.kotId);
           }
@@ -131,7 +143,7 @@ export const useUnifiedOrderData = () => {
           console.warn('🌉 REVERSE BRIDGE: Failed to sync back to localStorage:', reverseBridgeError);
         }
       }
-      
+
       console.log('✅ useUnifiedOrderData - order updated successfully:', {
         orderId,
         returnedOrder: updatedOrder ? {
@@ -140,15 +152,22 @@ export const useUnifiedOrderData = () => {
           kotCompleted: updatedOrder.kotCompleted
         } : null
       });
-      
+
+      // Update with the actual data from backend
       dispatch({ type: 'UPDATE_ORDER', payload: updatedOrder });
       return updatedOrder;
     } catch (error) {
       console.error('❌ useUnifiedOrderData - update error:', error);
+      // On error, fetch fresh data to revert optimistic changes
+      try {
+        await fetchOrders();
+      } catch (fetchError) {
+        console.error('❌ Failed to revert optimistic update:', fetchError);
+      }
       dispatch({ type: 'SET_ERROR', payload: error.message });
       throw error;
     }
-  }, [dispatch]);
+  }, [dispatch, state.orders, fetchOrders]);
 
   const addOrder = useCallback(async (orderData) => {
     try {
@@ -158,15 +177,15 @@ export const useUnifiedOrderData = () => {
         kotCompleted: orderData.kotCompleted,
         source: orderData.source
       });
-      
+
       const newOrder = await localData.upsertLocalOrder(orderData);
-      
+
       console.log('✅ useUnifiedOrderData - order added successfully:', {
         orderId: newOrder._id,
         status: newOrder.status,
         kotCompleted: newOrder.kotCompleted
       });
-      
+
       dispatch({ type: 'ADD_ORDER', payload: newOrder });
       return newOrder;
     } catch (error) {
