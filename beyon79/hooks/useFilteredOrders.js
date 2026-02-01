@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { KOT_STATUS } from '../models/kotModel';
 
 // Helper function to extract status from order (handles both string and object status)
 const getOrderStatus = (order) => {
@@ -11,86 +12,167 @@ const getOrderStatus = (order) => {
   return '';
 };
 
+// Helper function to map generic order status to KOT status
+export const mapOrderStatusToKOTStatus = (orderStatus) => {
+  switch (orderStatus) {
+    case 'placed':
+    case 'paid':
+    case 'pending':
+      return KOT_STATUS.PENDING;
+    case 'confirmed':
+      return KOT_STATUS.CONFIRMED;
+    case 'preparing':
+      return KOT_STATUS.PREPARING;
+    case 'completed':
+      return KOT_STATUS.READY;
+    case 'cancelled':
+      return KOT_STATUS.CANCELLED;
+    default:
+      return KOT_STATUS.PENDING;
+  }
+};
+
 export const useFilteredOrders = (orders, tab) => {
   return useMemo(() => {
     console.log(`🔍 useFilteredOrders - filtering ${orders.length} orders for tab: ${tab}`);
+    
+    // 🛠️ Fix #2: Filter before size check for Local tab
+    const localOrders = orders.filter(o => o.source === 'local');
+    
+    if (tab === 'Local') {
+      console.log('✅ Local tab - showing local orders only:', localOrders.length);
+      return localOrders;
+    }
+    
+    // 🛠️ Fix #1: Allow Local tab, short-circuit other non-critical tabs
+    if (orders.length > 5000 && tab !== 'KOT') {
+      console.log('🚫 Large dataset, short-circuiting for non-critical tab:', tab);
+      return [];
+    }
     
     let filteredOrders = [];
     
     switch (tab) {
       case 'Ready':
         console.log('🎯 Ready tab filtering - checking orders...');
-        console.log('🎯 All orders being checked:', orders.map(o => ({
-          _id: o._id,
-          status: o.status,
-          statusType: typeof o.status,
-          extractedStatus: getOrderStatus(o),
-          kotCompleted: o.kotCompleted,
-          kotId: o.kotId,
-          source: o.source
-        })));
         filteredOrders = orders.filter(order => {
           const extractedStatus = getOrderStatus(order);
           const isReady = extractedStatus === 'ready' || 
                          (order.kotCompleted === true && extractedStatus !== 'paid' && extractedStatus !== 'archived' && extractedStatus !== 'cancelled');
-          console.log(`🎯 Order ${order._id}: status="${order.status}" (${typeof order.status}), extracted="${extractedStatus}", kotCompleted=${order.kotCompleted}, passes=${isReady}`);
-          if (order.kotId) {
-            console.log(`🎯   - This is a KOT order with kotId: ${order.kotId}`);
-          }
-          if (order.source) {
-            console.log(`🎯   - Source: ${order.source}`);
-          }
           return isReady;
         });
         console.log(`🎯 Ready tab filtered ${filteredOrders.length} orders`);
         break;
       case 'Active':
-        filteredOrders = orders.filter(order => 
-          ['pending', 'confirmed', 'accepted', 'preparing'].includes(order.status) &&
-          order.source !== 'local'
-        );
+        console.log('⚡ Active tab filtering - checking orders...');
+        filteredOrders = orders.filter(order => {
+          const extractedStatus = getOrderStatus(order);
+          const isActive = ['pending', 'confirmed', 'preparing'].includes(extractedStatus);
+          return isActive;
+        });
+        console.log(`⚡ Active tab filtered ${filteredOrders.length} orders`);
         break;
       case 'Local':
         filteredOrders = orders.filter(order => order.source === 'local');
         break;
       case 'Paid':
-        console.log('💰 Paid tab filtering - checking orders...');
-        console.log('💰 All orders being checked:', orders.map(o => ({
-          _id: o._id,
-          status: o.status,
-          statusType: typeof o.status,
-          extractedStatus: getOrderStatus(o),
-          kotCompleted: o.kotCompleted,
-          kotId: o.kotId,
-          source: o.source
-        })));
         filteredOrders = orders.filter(order => {
           const extractedStatus = getOrderStatus(order);
           const isPaid = extractedStatus === 'paid';
-          console.log(`💰 Order ${order._id}: status="${order.status}" (${typeof order.status}), extracted="${extractedStatus}", isPaid=${isPaid}`);
           return isPaid;
         });
-        console.log(`💰 Paid tab filtered ${filteredOrders.length} orders`);
         break;
       case 'Archived':
-        console.log('📁 Archived tab filtering - checking orders...');
         filteredOrders = orders.filter(order => {
           const extractedStatus = getOrderStatus(order);
           const isArchived = extractedStatus === 'archived';
-          console.log(`📁 Order ${order._id}: status="${order.status}" (${typeof order.status}), extracted="${extractedStatus}", isArchived=${isArchived}`);
           return isArchived;
         });
-        console.log(`📁 Archived tab filtered ${filteredOrders.length} orders`);
         break;
       case 'Cancelled':
-        console.log('❌ Cancelled tab filtering - checking orders...');
         filteredOrders = orders.filter(order => {
           const extractedStatus = getOrderStatus(order);
           const isCancelled = extractedStatus === 'cancelled';
-          console.log(`❌ Order ${order._id}: status="${order.status}" (${typeof order.status}), extracted="${extractedStatus}", isCancelled=${isCancelled}`);
           return isCancelled;
         });
-        console.log(`❌ Cancelled tab filtered ${filteredOrders.length} orders`);
+        break;
+      case 'KOT':
+        console.log('🍳 KOT tab filtering - checking orders...');
+        
+        // ✅ STEP 4: Lock KOT to operational scope ONLY
+        const now = Date.now();
+        const ONE_HOUR = 60 * 60 * 1000;
+
+        filteredOrders = orders.filter(order => {
+          if (!order) return false;
+
+          const t = new Date(order.createdAt).getTime();
+          if (isNaN(t) || now - t > ONE_HOUR) {
+            return false; // ⏱️ hard window: only last hour
+          }
+
+          // 1️⃣ Status check
+          const allowedStatuses = [
+            'pending',
+            'placed',
+            'paid',
+            'confirmed',
+            'preparing'
+          ];
+          if (!allowedStatuses.includes(order.status)) return false;
+
+          // 2️⃣ Must NOT be completed
+          if (order.kotCompleted === true) return false;
+
+          // 3️⃣ Must have items (CRITICAL)
+          if (!Array.isArray(order.items) || order.items.length === 0) return false;
+
+          return true;
+        });
+
+        // ✅ OPTION A: Convert ONCE before UI - KOT-shaped objects
+        filteredOrders = filteredOrders.map(order => ({
+          id: order.kotId || order._id,
+          orderId: order._id,
+          status: order.status === 'pending'
+            ? 'PENDING'
+            : order.status === 'confirmed'
+            ? 'CONFIRMED'
+            : order.status === 'preparing'
+            ? 'PREPARING'
+            : 'PENDING',
+          
+          kotStatus: order.status,
+          items: order.items || [],
+          createdAt: order.createdAt,
+          source: order.source,
+          total: order.total || order.totalAmount || 0,
+          customerName: order.customerName || 'Manual Order',
+          tableNumber: order.tableNumber,
+          orderType: order.orderType,
+          priority: order.priority || 'normal',
+          notes: order.notes,
+          kitchenNotes: order.kitchenNotes,
+          confirmedAt: order.confirmedAt,
+          startedAt: order.startedAt,
+          completedAt: order.completedAt,
+          estimatedTime: order.estimatedTime,
+          actualTime: order.actualTime
+        }));
+
+        console.log('🍳 KOT FINAL FILTER:', {
+          total: orders.length,
+          filtered: filteredOrders.length,
+          timeWindow: '1 hour',
+          sample: filteredOrders[0]
+        });
+
+        // RULE #5: Short-circuit for KOT if no results
+        if (filteredOrders.length === 0) {
+          console.log('🚫 useFilteredOrders - KOT tab has no filtered results, returning empty array');
+          return [];
+        }
+        
         break;
       default:
         filteredOrders = [];

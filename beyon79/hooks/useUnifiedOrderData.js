@@ -2,6 +2,25 @@ import { useCallback } from 'react';
 import * as localData from '@/src/localDataService';
 import { useOrderData } from '../contexts/OrderDataContext';
 
+// ✅ STEP 3: Enforce retention AUTOMATICALLY (critical)
+const pruneOldOrders = (orders) => {
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+
+  const cleaned = orders.filter(o => {
+    const t = new Date(o.createdAt).getTime();
+    return !isNaN(t) && now - t <= DAY;
+  });
+
+  console.log('🗑️ Pruned old orders:', {
+    before: orders.length,
+    after: cleaned.length,
+    removed: orders.length - cleaned.length
+  });
+
+  return cleaned;
+};
+
 export const useUnifiedOrderData = () => {
   const { state, dispatch } = useOrderData();
 
@@ -83,11 +102,144 @@ export const useUnifiedOrderData = () => {
         kotCompleted: o.kotCompleted
       })));
 
-      dispatch({ type: 'SET_ORDERS', payload: allOrders });
+      // ✅ STEP 3: Enforce retention AUTOMATICALLY (critical)
+      const cleanedOrders = pruneOldOrders(allOrders);
+      
+      dispatch({ type: 'SET_ORDERS', payload: cleanedOrders });
 
-      return allOrders;
+      return cleanedOrders;
     } catch (error) {
       console.error('❌ useUnifiedOrderData - fetch error:', error);
+      dispatch({ type: 'SET_ERROR', payload: error.message });
+      throw error;
+    }
+  }, [dispatch]);
+
+  // NEW: Fetch only KOT-relevant orders to prevent data overload
+  const fetchKOTOrders = useCallback(async () => {
+    try {
+      dispatch({ type: 'SET_LOADING', payload: true });
+
+      // BRIDGE FUNCTION: Sync KOT data from localStorage to localforage (same as above)
+      try {
+        const kotTabData = JSON.parse(localStorage.getItem('kotTabData') || '[]');
+        console.log('🌉 BRIDGE: Found KOT data in localStorage:', kotTabData.length);
+
+        if (kotTabData.length > 0) {
+          const kotOrders = kotTabData.map(kot => ({
+            _id: kot.id,
+            kotId: kot.id,
+            orderId: kot.orderId || kot.id,
+            status: kot.status === 'completed' ? 'ready' : kot.status,
+            kotCompleted: kot.status === 'completed',
+            items: kot.items || [],
+            total: kot.totalAmount || 0,
+            totalAmount: kot.totalAmount || 0,
+            createdAt: kot.createdAt,
+            updatedAt: kot.updatedAt || kot.createdAt,
+            source: 'kot',
+            tableNumber: kot.tableNumber,
+            orderType: kot.orderType,
+            customerName: kot.customerName,
+            priority: kot.priority,
+            kitchenNotes: kot.kitchenNotes,
+            confirmedAt: kot.confirmedAt,
+            startedAt: kot.startedAt,
+            completedAt: kot.completedAt,
+            estimatedTime: kot.estimatedTime,
+            actualTime: kot.actualTime
+          }));
+
+          const existingOrders = await localData.getAllOrders();
+          const mergedOrders = [...existingOrders];
+          kotOrders.forEach(kotOrder => {
+            const existingIndex = mergedOrders.findIndex(o => o._id === kotOrder._id || o.kotId === kotOrder.kotId);
+            if (existingIndex >= 0) {
+              mergedOrders[existingIndex] = kotOrder;
+            } else {
+              mergedOrders.push(kotOrder);
+            }
+          });
+
+          await localData.saveAllOrders(mergedOrders);
+          console.log('🌉 BRIDGE: Synced KOT data to localforage successfully');
+        }
+      } catch (bridgeError) {
+        console.warn('🌉 BRIDGE: Failed to sync KOT data:', bridgeError);
+      }
+
+      // PERFORMANCE: Get all orders but filter immediately for KOT-relevant ones
+      const allOrders = await localData.getAllOrders();
+      
+      // PERFORMANCE: Apply time window filter first for large datasets
+      let kotEligibleOrders = allOrders;
+      
+      if (allOrders.length > 1000) {
+        console.log('🍳 fetchKOTOrders - large dataset, applying time window filter first');
+        const last60Min = Date.now() - 60 * 60 * 1000; // Last 60 minutes
+        kotEligibleOrders = allOrders.filter(order => {
+          const orderTime = new Date(order.createdAt).getTime();
+          return orderTime >= last60Min && !isNaN(orderTime);
+        });
+        console.log(`🍳 Time window filtered to ${kotEligibleOrders.length} orders (last 60 min)`);
+      }
+      
+      // TEMP FIX: Filter for KOT-relevant orders using generic statuses
+      const kotRelevantOrders = kotEligibleOrders.filter(order => {
+        // MUST have a valid status
+        if (!order.status) return false;
+        
+        // DEBUG: Log first few orders to understand data structure
+        if (kotEligibleOrders.indexOf(order) < 3) {
+          console.log('🔍 DEBUG Order Sample:', {
+            _id: order._id,
+            status: order.status,
+            source: order.source,
+            createdAt: order.createdAt
+          });
+        }
+        
+        // Include orders that would be relevant for kitchen operations
+        // placed/paid = pending for kitchen
+        // confirmed = preparing 
+        // completed = ready (but only if recent)
+        
+        if (['placed', 'paid'].includes(order.status)) {
+          return true; // These are pending for kitchen
+        }
+        
+        if (['confirmed', 'preparing'].includes(order.status)) {
+          return true; // These are being prepared
+        }
+        
+        // Only include completed orders if they're very recent (last 15 minutes)
+        if (order.status === 'completed') {
+          const orderTime = new Date(order.createdAt).getTime();
+          const last15Min = Date.now() - 15 * 60 * 1000;
+          return orderTime >= last15Min;
+        }
+        
+        return false;
+      });
+
+      console.log('🎯 KOT FILTERED ORDERS:', {
+        total: allOrders.length,
+        filtered: kotRelevantOrders.length,
+        reduction: `${((allOrders.length - kotRelevantOrders.length) / allOrders.length * 100).toFixed(1)}% reduction`,
+        sampleFiltered: kotRelevantOrders.slice(0, 3).map(o => ({
+          id: o._id,
+          status: o.status,
+          source: o.source,
+          createdAt: o.createdAt
+        }))
+      });
+
+      // ❌ DO NOT dispatch to global state - KOT data is now separate
+      // dispatch({ type: 'SET_ORDERS', payload: kotRelevantOrders });
+
+      return kotRelevantOrders;
+    } catch (error) {
+      console.error('❌ useUnifiedOrderData - fetchKOTOrders error:', error);
       dispatch({ type: 'SET_ERROR', payload: error.message });
       throw error;
     }
@@ -200,6 +352,7 @@ export const useUnifiedOrderData = () => {
     loading: state.loading,
     error: state.error,
     fetchOrders,
+    fetchKOTOrders, // NEW: KOT-optimized fetch function
     updateOrder,
     addOrder
   };

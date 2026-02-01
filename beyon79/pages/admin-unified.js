@@ -101,84 +101,41 @@ function AdminUnifiedPageContent() {
     handleToggleOfferView,
   } = useAdminState();
 
-  // Import test data on app initialization
-  useEffect(() => {
-    const importTestData = async () => {
-      try {
-        console.log("🔄 Importing test data from local-orders-updated.json...");
-        console.log("📊 Test data to import:", localOrdersData.length, "orders");
-        console.log("📋 Sample test data:", localOrdersData.slice(0, 2).map(o => ({ id: o._id, status: o.status, kotCompleted: o.kotCompleted })));
-
-        // Check current local orders before import
-        const existingOrders = await localData.getLocalOrders();
-        console.log("📊 Existing local orders before import:", existingOrders.length);
-
-        // Check if our target orders already exist
-        const targetOrder1 = existingOrders.find(o => o._id === 'KOT-1769618963803-6QXT5KIX7');
-        const targetOrder2 = existingOrders.find(o => o._id === 'KOT-1769618963804-ABC123DEF');
-        console.log("🎯 Target orders before import:", {
-          'KOT-1769618963803-6QXT5KIX7': !!targetOrder1,
-          'KOT-1769618963804-ABC123DEF': !!targetOrder2
-        });
-
-        // Only import if target orders don't exist to avoid duplicates
-        if (!targetOrder1 || !targetOrder2) {
-          console.log("📥 Target orders not found, proceeding with import...");
-          await localData.importOrdersFromJSON(localOrdersData);
-          console.log("✅ Test data imported successfully");
-        } else {
-          console.log("📋 Target orders already exist, skipping import");
-        }
-
-        // Check orders after import
-        const afterImport = await localData.getLocalOrders();
-        console.log("📊 Local orders after import:", afterImport.length);
-        console.log("📋 Sample imported orders:", afterImport.slice(0, 3).map(o => ({ id: o._id, status: o.status, kotCompleted: o.kotCompleted })));
-
-        // Check if our target orders exist after import
-        const targetOrder1After = afterImport.find(o => o._id === 'KOT-1769618963803-6QXT5KIX7');
-        const targetOrder2After = afterImport.find(o => o._id === 'KOT-1769618963804-ABC123DEF');
-        console.log("🎯 Target orders after import:", {
-          'KOT-1769618963803-6QXT5KIX7': !!targetOrder1After,
-          'KOT-1769618963804-ABC123DEF': !!targetOrder2After,
-          details1: targetOrder1After ? { status: targetOrder1After.status, kotCompleted: targetOrder1After.kotCompleted } : null,
-          details2: targetOrder2After ? { status: targetOrder2After.status, kotCompleted: targetOrder2After.kotCompleted } : null
-        });
-
-        // Count ready orders
-        const readyOrders = afterImport.filter(o => o.status === 'ready' || o.kotCompleted === true);
-        console.log("🎯 Ready orders count after import:", readyOrders.length);
-        console.log("🎯 Ready orders:", readyOrders.map(o => ({ id: o._id, status: o.status, kotCompleted: o.kotCompleted })));
-
-        // Update state immediately - using new unified system
-        console.log("📊 Import completed - unified system will handle state updates");
-
-        // Force refresh orders after import (with longer delay to ensure import completes)
-        setTimeout(async () => {
-          console.log("🔄 Force refreshing orders after import...");
-          await fetchOrders(); // Use new fetchOrders instead of fetchAndFilterOrders
-        }, 500); // Increased delay from 100ms to 500ms
-      } catch (error) {
-        console.error("❌ Failed to import test data:", error);
-        // Still try to fetch orders even if import fails
-        try {
-          await fetchOrders();
-        } catch (fetchError) {
-          console.error("❌ Failed to fetch orders after import error:", fetchError);
-        }
-      }
-    };
-
-    // Always try to import on mount if we have test data
-    if (localOrdersData && localOrdersData.length > 0) {
-      console.log("🔄 Starting import process - using unified system");
-      importTestData();
+  // Smart fetch function - uses optimized fetch for KOT tab
+  const smartFetchOrders = useCallback(async () => {
+    console.log(`🔍 smartFetchOrders called with tab: "${tab}"`);
+    if (tab === 'KOT') {
+      console.log('🚫 KOT tab detected - DO NOT call fetchOrders');
+      return; // 🚫 DO NOT call fetchOrders for KOT tab
     } else {
-      // If no test data, still fetch existing orders
-      console.log("📋 No test data found, fetching existing orders...");
-      fetchOrders();
+      console.log('🔄 Using fetchOrders for general tab');
+      return await fetchOrders();
     }
-  }, []); // Run once on mount
+  }, [tab]); // Remove function dependencies to prevent infinite loop
+
+  // Import test data on app initialization - DISABLED to prevent order flood
+  useEffect(() => {
+    // DISABLED: Test data import causing 278 orders to flood the system
+    console.log("⏸️ Test data import disabled to prevent order flood");
+    
+    // Only fetch if not on KOT tab (KOT tab has its own optimized fetch)
+    if (tab !== 'KOT') {
+      try {
+        setTimeout(async () => {
+          await smartFetchOrders();
+        }, 500);
+      } catch (error) {
+        console.error("❌ Failed to fetch orders:", error);
+      }
+    } else {
+      console.log("⏸️ Skipping initial fetch - KOT tab will use optimized fetch");
+    }
+    
+  }, [tab]); // Add tab dependency to re-evaluate when tab changes
+
+  // ✅ FIXED: KOT must use the SAME orders list as Local
+  // ❌ REMOVED: KOT-specific fetching that created separate dataset
+  // Rule: KOT does NOT fetch, KOT does NOT optimize fetch, KOT ONLY filters
 
   // Products management
   const {
@@ -196,6 +153,7 @@ function AdminUnifiedPageContent() {
     loading,
     error,
     fetchOrders,
+    fetchKOTOrders, // NEW: KOT-optimized fetch function
     updateOrder,
     addOrder
   } = useUnifiedOrderData();
@@ -214,7 +172,7 @@ function AdminUnifiedPageContent() {
       console.log('🔄 KOT update event received:', event.detail);
       // Trigger order refresh to sync data
       try {
-        await fetchOrders();
+        await smartFetchOrders();
       } catch (error) {
         console.error('❌ Failed to refresh orders after KOT update:', error);
       }
@@ -222,7 +180,7 @@ function AdminUnifiedPageContent() {
 
     window.addEventListener('kot:updated', handleKOTUpdate);
     return () => window.removeEventListener('kot:updated', handleKOTUpdate);
-  }, [fetchOrders]);
+  }, []); // Remove smartFetchOrders dependency to prevent infinite loop
 
   const updateLocalStatus = async (orderId, status, localOrders, setLocalOrders, showToast) => {
     try {
@@ -274,15 +232,15 @@ function AdminUnifiedPageContent() {
       // Remove from local storage
       await localData.deleteLocalOrder(orderId);
       
-      // Refresh orders using new system
-      await fetchOrders();
+      // Refresh orders using smart fetch
+      await smartFetchOrders();
       
       showToast('Order deleted successfully');
     } catch (error) {
       console.error('Error deleting order:', error);
       showToast('Failed to delete order');
       // Refresh to restore correct state
-      await fetchOrders();
+      await smartFetchOrders();
     }
   };
 
@@ -315,7 +273,7 @@ function AdminUnifiedPageContent() {
   const forceRefreshOrders = async () => {
     console.log("🔄 Force refreshing orders...");
     try {
-      await fetchOrders(); // Use new fetchOrders instead of fetchAndFilterOrders
+      await smartFetchOrders(); // Use smart fetch for tab-optimized refresh
       console.log("✅ Orders refreshed successfully");
     } catch (error) {
       console.error("❌ Failed to refresh orders:", error);
@@ -689,7 +647,7 @@ function AdminUnifiedPageContent() {
         />
       ) : tab === "KOT" ? (
         <KOTTab
-          localOrders={orders}
+          kotOrders={filteredOrders}
           onLocalOrderUpdate={async (updatedOrder) => {
             console.log('🔄 KOTTab onLocalOrderUpdate called:', {
               orderId: updatedOrder._id,

@@ -765,14 +765,23 @@ export default function ManualOrderPage() {
           ? { customerNumber }
           : {}),
         note,
-        status: "pending",
+        status: "preparing", // 🔥 KEY: Promote manual orders directly to KOT state
         total: totalAmount,
         createdAt: new Date().toISOString(),
         source: "local",
       };
 
+      // ✅ FIXED: Ensure manual order HAS items (critical for KOT)
+      const orderToSave = {
+        ...orderPayload,
+        items: Array.isArray(orderPayload.items) ? orderPayload.items : cart,
+        total: orderPayload.total ?? totalAmount,
+        source: 'local',
+        status: 'preparing' // 🔥 KEY: Promote manual orders directly to KOT state
+      };
+
       // Save order locally using localDataService
-      const savedOrder = await upsertLocalOrder(orderPayload);
+      const savedOrder = await upsertLocalOrder(orderToSave);
 
       setResultMsg("✅ Order created successfully. Redirecting...");
       setTimeout(() => {
