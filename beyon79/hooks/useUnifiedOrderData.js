@@ -28,61 +28,11 @@ export const useUnifiedOrderData = () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
 
-      // BRIDGE FUNCTION: Sync KOT data from localStorage to localforage
-      try {
-        const kotTabData = JSON.parse(localStorage.getItem('kotTabData') || '[]');
-        console.log('🌉 BRIDGE: Found KOT data in localStorage:', kotTabData.length);
-
-        if (kotTabData.length > 0) {
-          // Convert KOT data to order format and sync to localforage
-          const kotOrders = kotTabData.map(kot => ({
-            _id: kot.id,
-            kotId: kot.id,
-            orderId: kot.orderId || kot.id,
-            status: kot.status === 'completed' ? 'ready' : kot.status,
-            kotCompleted: kot.status === 'completed',
-            items: kot.items || [],
-            total: kot.totalAmount || 0,
-            totalAmount: kot.totalAmount || 0,
-            createdAt: kot.createdAt,
-            updatedAt: kot.updatedAt || kot.createdAt,
-            source: 'kot',
-            tableNumber: kot.tableNumber,
-            orderType: kot.orderType,
-            customerName: kot.customerName,
-            priority: kot.priority,
-            kitchenNotes: kot.kitchenNotes,
-            confirmedAt: kot.confirmedAt,
-            startedAt: kot.startedAt,
-            completedAt: kot.completedAt,
-            estimatedTime: kot.estimatedTime,
-            actualTime: kot.actualTime
-          }));
-
-          // Get existing orders
-          const existingOrders = await localData.getAllOrders();
-          console.log('🌉 BRIDGE: Existing orders in localforage:', existingOrders.length);
-
-          // Merge orders - KOT orders take precedence
-          const mergedOrders = [...existingOrders];
-          kotOrders.forEach(kotOrder => {
-            const existingIndex = mergedOrders.findIndex(o => o._id === kotOrder._id || o.kotId === kotOrder.kotId);
-            if (existingIndex >= 0) {
-              mergedOrders[existingIndex] = kotOrder; // Update existing
-            } else {
-              mergedOrders.push(kotOrder); // Add new
-            }
-          });
-
-          // Save merged data to localforage
-          await localData.saveAllOrders(mergedOrders);
-          console.log('🌉 BRIDGE: Synced KOT data to localforage successfully');
-        }
-      } catch (bridgeError) {
-        console.warn('🌉 BRIDGE: Failed to sync KOT data:', bridgeError);
-      }
-
+      // ❌ REMOVED: Dangerous legacy bridge code that was causing data pollution
+      // KOT must NEVER restore old data from localStorage
       // Single source of truth - fetch from localforage only
+
+      // Get all orders from localforage only
       const allOrders = await localData.getAllOrders();
 
       console.log('🔄 useUnifiedOrderData - fetched orders:', allOrders.length);
@@ -120,53 +70,9 @@ export const useUnifiedOrderData = () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
 
-      // BRIDGE FUNCTION: Sync KOT data from localStorage to localforage (same as above)
-      try {
-        const kotTabData = JSON.parse(localStorage.getItem('kotTabData') || '[]');
-        console.log('🌉 BRIDGE: Found KOT data in localStorage:', kotTabData.length);
-
-        if (kotTabData.length > 0) {
-          const kotOrders = kotTabData.map(kot => ({
-            _id: kot.id,
-            kotId: kot.id,
-            orderId: kot.orderId || kot.id,
-            status: kot.status === 'completed' ? 'ready' : kot.status,
-            kotCompleted: kot.status === 'completed',
-            items: kot.items || [],
-            total: kot.totalAmount || 0,
-            totalAmount: kot.totalAmount || 0,
-            createdAt: kot.createdAt,
-            updatedAt: kot.updatedAt || kot.createdAt,
-            source: 'kot',
-            tableNumber: kot.tableNumber,
-            orderType: kot.orderType,
-            customerName: kot.customerName,
-            priority: kot.priority,
-            kitchenNotes: kot.kitchenNotes,
-            confirmedAt: kot.confirmedAt,
-            startedAt: kot.startedAt,
-            completedAt: kot.completedAt,
-            estimatedTime: kot.estimatedTime,
-            actualTime: kot.actualTime
-          }));
-
-          const existingOrders = await localData.getAllOrders();
-          const mergedOrders = [...existingOrders];
-          kotOrders.forEach(kotOrder => {
-            const existingIndex = mergedOrders.findIndex(o => o._id === kotOrder._id || o.kotId === kotOrder.kotId);
-            if (existingIndex >= 0) {
-              mergedOrders[existingIndex] = kotOrder;
-            } else {
-              mergedOrders.push(kotOrder);
-            }
-          });
-
-          await localData.saveAllOrders(mergedOrders);
-          console.log('🌉 BRIDGE: Synced KOT data to localforage successfully');
-        }
-      } catch (bridgeError) {
-        console.warn('🌉 BRIDGE: Failed to sync KOT data:', bridgeError);
-      }
+      // ❌ REMOVED: Dangerous legacy bridge code that was causing data pollution
+      // KOT must NEVER restore old data from localStorage
+      // Single source of truth - fetch from localforage only
 
       // PERFORMANCE: Get all orders but filter immediately for KOT-relevant ones
       const allOrders = await localData.getAllOrders();
@@ -268,33 +174,6 @@ export const useUnifiedOrderData = () => {
       }
 
       const updatedOrder = await localData.updateLocalOrderStatus(orderId, updates);
-
-      // REVERSE BRIDGE: Sync KOT updates back to localStorage
-      if (updatedOrder && updatedOrder.source === 'kot') {
-        try {
-          const kotTabData = JSON.parse(localStorage.getItem('kotTabData') || '[]');
-          const kotIndex = kotTabData.findIndex(kot => kot.id === updatedOrder.kotId || kot.id === updatedOrder._id);
-
-          if (kotIndex >= 0) {
-            // Update KOT in localStorage
-            kotTabData[kotIndex] = {
-              ...kotTabData[kotIndex],
-              status: updatedOrder.status === 'ready' ? 'completed' : updatedOrder.status,
-              items: updatedOrder.items || kotTabData[kotIndex].items,
-              updatedAt: updatedOrder.updatedAt,
-              confirmedAt: updatedOrder.confirmedAt,
-              startedAt: updatedOrder.startedAt,
-              completedAt: updatedOrder.completedAt,
-              actualTime: updatedOrder.actualTime
-            };
-
-            localStorage.setItem('kotTabData', JSON.stringify(kotTabData));
-            console.log('🌉 REVERSE BRIDGE: Updated KOT in localStorage:', updatedOrder.kotId);
-          }
-        } catch (reverseBridgeError) {
-          console.warn('🌉 REVERSE BRIDGE: Failed to sync back to localStorage:', reverseBridgeError);
-        }
-      }
 
       console.log('✅ useUnifiedOrderData - order updated successfully:', {
         orderId,
