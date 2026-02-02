@@ -7,24 +7,10 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
   const [kitchenNotes, setKitchenNotes] = useState(kot?.kitchenNotes || '');
   const [itemTimers, setItemTimers] = useState({});
 
-  useEffect(() => {
-    console.log('🔄 KOTDetail - kot prop changed, new status:', kot?.status);
-    if (kot) {
-      setKitchenNotes(kot.kitchenNotes || '');
-      // Initialize timers for items that are being prepared
-      const timers = {};
-      kot.items.forEach((item, index) => {
-        const itemId = item.id || `${kot.id}-item-${index}`;
-        if (item.status === ITEM_STATUS.PREPARING && item.startedAt) {
-          const elapsed = Date.now() - new Date(item.startedAt).getTime();
-          timers[itemId] = elapsed;
-          console.log(`⏰ Initialized timer for item ${itemId} (${item.name}): ${formatTime(elapsed)}`);
-        }
-      });
-      setItemTimers(timers);
-      console.log('📊 Timers initialized for', Object.keys(timers).length, 'preparing items');
-    }
-  }, [kot]);
+  const kotStatus = kot?.status;
+
+
+
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -41,7 +27,11 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [kot]);
+  }, [kot.id, kot.items]);
+
+
+
+
 
   const formatTime = (ms) => {
     const seconds = Math.floor(ms / 1000);
@@ -73,19 +63,22 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
 
   const updateItemStatus = (itemId, newStatus) => {
     console.log(`🔄 Updating item ${itemId} to ${newStatus}`);
-    
+
     const updatedItems = kot.items.map((item, index) => {
       const currentItemId = item.id || `${kot.id}-item-${index}`;
-      
+
       if (currentItemId === itemId) {
+        // Guard against re-trigger loops
+        if (item.status === newStatus) return item;
+
         console.log(`✅ Found item to update: ${item.name} (${currentItemId})`);
-        
-        const updatedItem = { 
-          ...item, 
+
+        const updatedItem = {
+          ...item,
           id: currentItemId, // Ensure item has an ID
-          status: newStatus 
+          status: newStatus
         };
-        
+
         if (newStatus === ITEM_STATUS.PREPARING && !item.startedAt) {
           updatedItem.startedAt = new Date().toISOString();
           console.log(`⏰ Started preparation for ${item.name} at ${updatedItem.startedAt}`);
@@ -96,24 +89,77 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
           );
           console.log(`✅ Completed ${item.name} in ${updatedItem.actualPrepTime} minutes`);
         }
-        
+
         return updatedItem;
       }
       return item;
     });
 
-    const allCompleted = updatedItems.every(item => 
-      item.status === ITEM_STATUS.COMPLETED || item.status === ITEM_STATUS.CANCELLED
-    );
-
     const updatedKOT = {
       ...kot,
-      items: updatedItems,
-      status: allCompleted ? KOT_STATUS.COMPLETED : kot.status,
-      completedAt: allCompleted ? new Date().toISOString() : kot.completedAt
+      items: updatedItems
     };
 
-    console.log('🔄 Calling onUpdate with updated KOT:', updatedKOT);
+    // 🔥 CRITICAL FIX: Update KOT status based on item statuses
+    const hasPreparingItems = updatedItems.some(item => item.status === ITEM_STATUS.PREPARING);
+    const hasReadyItems = updatedItems.some(item => item.status === ITEM_STATUS.READY);
+    const hasCompletedItems = updatedItems.some(item => item.status === ITEM_STATUS.COMPLETED);
+    const hasPendingItems = updatedItems.some(item => item.status === ITEM_STATUS.PENDING);
+    const hasCancelledItems = updatedItems.some(item => item.status === ITEM_STATUS.CANCELLED);
+    
+    // Count active (non-cancelled) items for completion logic
+    const activeItems = updatedItems.filter(item => item.status !== ITEM_STATUS.CANCELLED);
+    const allCompleted = activeItems.length > 0 && activeItems.every(item => 
+      item.status === ITEM_STATUS.COMPLETED
+    );
+    const allReady = activeItems.length > 0 && activeItems.every(item => 
+      item.status === ITEM_STATUS.READY || item.status === ITEM_STATUS.COMPLETED
+    );
+
+    console.log('🔍 KOT Status Logic:', {
+      hasPreparingItems,
+      hasReadyItems,
+      hasCompletedItems,
+      hasPendingItems,
+      hasCancelledItems,
+      allCompleted,
+      allReady,
+      currentStatus: kot.status,
+      totalItems: updatedItems.length,
+      activeItems: activeItems.length,
+      cancelledItems: updatedItems.length - activeItems.length,
+      itemStatuses: updatedItems.map(i => ({ name: i.name, status: i.status }))
+    });
+
+    // Only change to COMPLETED when ALL ACTIVE items are completed
+    if (allCompleted && kot.status !== KOT_STATUS.COMPLETED) {
+      updatedKOT.status = KOT_STATUS.COMPLETED;
+      updatedKOT.completedAt = new Date().toISOString();
+      console.log('🔥 KOT status changed to COMPLETED - all active items done');
+    }
+    // Change to READY when ALL ACTIVE items are ready/completed (but not all completed)
+    else if (allReady && !allCompleted && kot.status !== KOT_STATUS.READY) {
+      updatedKOT.status = KOT_STATUS.READY;
+      console.log('🔥 KOT status changed to READY - all active items ready');
+    }
+    // Change to PREPARING if any active items are preparing (higher priority than ready)
+    else if (hasPreparingItems && kot.status !== KOT_STATUS.PREPARING) {
+      updatedKOT.status = KOT_STATUS.PREPARING;
+      updatedKOT.startedAt = updatedKOT.startedAt || new Date().toISOString();
+      console.log('🔥 KOT status changed to PREPARING due to item preparation');
+    }
+    // Keep as PENDING if there are still pending active items and no preparing/ready items
+    else if (hasPendingItems && !hasPreparingItems && !hasReadyItems && kot.status !== KOT_STATUS.PENDING) {
+      updatedKOT.status = KOT_STATUS.PENDING;
+      console.log('🔥 KOT status kept as PENDING - still has pending items');
+    }
+    // If all items are cancelled, mark as cancelled
+    else if (hasCancelledItems && activeItems.length === 0 && kot.status !== KOT_STATUS.CANCELLED) {
+      updatedKOT.status = KOT_STATUS.CANCELLED;
+      console.log('🔥 KOT status changed to CANCELLED - all items cancelled');
+    }
+
+    console.log('�� Calling onUpdate with updated KOT:', updatedKOT);
     onUpdate(updatedKOT);
   };
 
@@ -142,62 +188,33 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
 
     // Show success message
     if (typeof window !== 'undefined' && window.showToast) {
-      window.showToast(`Order ${kot.id} bulk completed - all items marked as finished`);
+      window.showToast(`Order ${String(kot.id || 'UNKNOWN')} bulk completed - all items marked as finished`);
     }
   };
 
   const handleBulkStartPreparation = () => {
-    console.log('🚀 Starting preparation for all items in KOT:', kot.id);
-    console.log('📋 Current items:', kot.items.map(i => ({ name: i.name, status: i.status })));
-    
+    // Guard against re-trigger loops
+    if (kotStatus === KOT_STATUS.PREPARING) return;
+
     const now = new Date().toISOString();
-    
-    // Update ALL items to PREPARING status immediately
-    const updatedItems = kot.items.map((item, index) => {
-      // Ensure each item has a unique ID
-      const itemId = item.id || `${kot.id}-item-${index}`;
-      
-      console.log(`🔄 Updating item ${itemId}: ${item.name} -> PREPARING`);
-      
-      return {
-        ...item,
-        id: itemId, // Ensure item has an ID
-        status: ITEM_STATUS.PREPARING,
-        startedAt: now // All items start at the same time
-      };
-    });
 
-    console.log('✅ Updated all items to PREPARING:', updatedItems.map(i => ({ name: i.name, status: i.status })));
+    const updatedItems = kot.items.map((item, index) => ({
+      ...item,
+      id: item.id || `${kot.id}-item-${index}`,
+      status: ITEM_STATUS.PREPARING,   // 🔥 REQUIRED
+      startedAt: item.startedAt || now
+    }));
 
-    // Update the entire KOT to PREPARING status
     const updatedKOT = {
       ...kot,
       status: KOT_STATUS.PREPARING,
-      items: updatedItems,
-      startedAt: now // Set KOT start time
+      startedAt: now,
+      items: updatedItems
     };
 
-    console.log('🔄 Calling onUpdate with KOT:', {
-      id: updatedKOT.id,
-      status: updatedKOT.status,
-      startedAt: updatedKOT.startedAt,
-      itemCount: updatedKOT.items.length,
-      itemStatuses: updatedKOT.items.map(i => ({ name: i.name, status: i.status, startedAt: i.startedAt }))
-    });
-    
-    // Call the update function
+    console.log('🔥 PREPARING STARTED');
+
     onUpdate(updatedKOT);
-
-    // Initialize timers immediately for all items
-    const newTimers = {};
-    updatedItems.forEach(item => {
-      newTimers[item.id] = 0; // Start timer at 0
-    });
-    setItemTimers(newTimers);
-
-    if (typeof window !== 'undefined' && window.showToast) {
-      window.showToast(`Order ${kot.id} - preparation started for all ${updatedItems.length} items`);
-    }
   };
 
   const handleBulkMarkReady = () => {
@@ -214,45 +231,28 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
     });
 
     if (typeof window !== 'undefined' && window.showToast) {
-      window.showToast(`Order ${kot.id} - all items marked as ready`);
+      window.showToast(`Order ${String(kot.id || 'UNKNOWN')} - all items marked as ready`);
     }
   };
 
   const updateKOTStatus = (newStatus) => {
-    console.log('🔄 KOTDetail updateKOTStatus called:', { 
-      kotId: kot.id, 
-      newStatus, 
-      currentStatus: kot.status,
-      currentItems: kot.items.map(i => ({ name: i.name, status: i.status }))
+    console.log('🔄 KOTDetail updateKOTStatus called:', {
+      kotId: kot.id,
+      newStatus,
+      currentStatus: kot.status
     });
-    
+
     const updatedKOT = { ...kot, status: newStatus };
-    
+
     // Add timestamps based on status
     if (newStatus === KOT_STATUS.CONFIRMED && !kot.confirmedAt) {
       updatedKOT.confirmedAt = new Date().toISOString();
-      console.log('✅ KOT confirmed at:', updatedKOT.confirmedAt);
-      // Keep items as PENDING when KOT is confirmed (they'll be updated when preparation starts)
+      console.log('✅ CONFIRMED:', updatedKOT.status);
+      // Keep items as PENDING when KOT is confirmed
       updatedKOT.items = kot.items.map(item => ({
         ...item,
         status: ITEM_STATUS.PENDING
       }));
-      console.log('📋 Items kept as PENDING after confirmation');
-    } else if (newStatus === KOT_STATUS.PREPARING && !kot.startedAt) {
-      updatedKOT.startedAt = new Date().toISOString();
-      console.log('🚀 KOT preparation started at:', updatedKOT.startedAt);
-      // Update all items to PREPARING status
-      updatedKOT.items = kot.items.map((item, index) => {
-        const itemId = item.id || `${kot.id}-item-${index}`;
-        console.log(`🔄 Setting item ${itemId} (${item.name}) to PREPARING`);
-        return {
-          ...item,
-          id: itemId,
-          status: ITEM_STATUS.PREPARING,
-          startedAt: new Date().toISOString()
-        };
-      });
-      console.log('📋 All items set to PREPARING');
     } else if (newStatus === KOT_STATUS.COMPLETED && kot.startedAt) {
       updatedKOT.completedAt = new Date().toISOString();
       updatedKOT.actualTime = Math.floor(
@@ -265,19 +265,15 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
         status: ITEM_STATUS.COMPLETED,
         completedAt: new Date().toISOString()
       }));
-      console.log('📋 All items set to COMPLETED');
     }
 
     console.log('🔄 Calling onUpdate with KOT:', {
       id: updatedKOT.id,
       status: updatedKOT.status,
-      itemCount: updatedKOT.items.length,
-      itemStatuses: updatedKOT.items.map(i => ({ name: i.name, status: i.status }))
+      itemCount: updatedKOT.items.length
     });
-    
-    console.log('🔄 KOTDetail - before onUpdate, kot.status:', kot.status);
+
     onUpdate(updatedKOT);
-    console.log('🔄 KOTDetail - after onUpdate call');
   };
 
   const saveKitchenNotes = () => {
@@ -302,21 +298,25 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
 
     // Show success message
     if (typeof window !== 'undefined' && window.showToast) {
-      window.showToast(`Order ${kot.id} has been cancelled`);
+      window.showToast(`Order ${String(kot.id || 'UNKNOWN')} has been cancelled`);
     }
 
     // Close the detail view after cancelling
     onClose();
   };
 
-  if (!kot) {
-    return (
-      <div className="p-8 text-center">
-        <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-        <p className="text-gray-500">Select a KOT to view details</p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    console.log('� UI STATUS CHANGED:', {
+      kotId: kot?.id,
+      kotStatus: kotStatus,
+      shouldShowConfirmAll: kotStatus === KOT_STATUS.PENDING,
+      shouldShowStartPrep: kotStatus === KOT_STATUS.CONFIRMED,
+      shouldShowMarkReady: kotStatus === KOT_STATUS.PREPARING,
+      shouldShowCompleteAll: kotStatus === KOT_STATUS.READY
+    });
+  }, [kotStatus]);
+
+  if (!kot) return <div>KOT not found</div>;
 
   return (
     <div className="bg-white h-full flex flex-col">
@@ -324,16 +324,12 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
       <div className="px-6 py-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-bold text-gray-900">{kot.id}</h2>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getItemStatusColor(kot.status)}`}>
-              {(typeof kot.status === 'string' ? kot.status : 
-                (typeof kot.status === 'object' && kot.status.status) ? kot.status.status : 
-                'pending').toUpperCase()}
-            </span>
+            <h2 className="text-2xl font-bold text-gray-900">{String(kot.id ?? 'UNKNOWN')}</h2>
+          <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getItemStatusColor(kotStatus)}`}>
+            {String(kotStatus || 'pending').toUpperCase()}
+          </span>
             <span className={`px-3 py-1 rounded-full text-sm font-medium ${getPriorityColor(kot.priority)}`}>
-              {(typeof kot.priority === 'string' ? kot.priority : 
-                (typeof kot.priority === 'object' && kot.priority.priority) ? kot.priority.priority : 
-                'normal').toUpperCase()}
+              {String(kot.priority || 'normal').toUpperCase()}
             </span>
             {kot.tableNumber && (
               <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
@@ -419,15 +415,7 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
       {/* Order Actions */}
       <div className="px-6 py-4 border-b border-gray-200">
         <div className="flex gap-2 flex-wrap">
-          {console.log('🔍 Button rendering check:', {
-            kotStatus: kot.status,
-            isPending: kot.status === KOT_STATUS.PENDING,
-            isConfirmed: kot.status === KOT_STATUS.CONFIRMED,
-            isPreparing: kot.status === KOT_STATUS.PREPARING,
-            isReady: kot.status === KOT_STATUS.READY
-          })}
-          
-          {kot.status === KOT_STATUS.PENDING && (
+          {kotStatus === KOT_STATUS.PENDING && (
             <button
               onClick={() => updateKOTStatus(KOT_STATUS.CONFIRMED)}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
@@ -436,7 +424,7 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
               Confirm All
             </button>
           )}
-          {kot.status === KOT_STATUS.CONFIRMED && (
+          {kotStatus === KOT_STATUS.CONFIRMED && (
             <button
               onClick={handleBulkStartPreparation}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
@@ -445,7 +433,7 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
               Start Preparation
             </button>
           )}
-          {kot.status === KOT_STATUS.PREPARING && (
+          {kotStatus === KOT_STATUS.PREPARING && (
             <button
               onClick={handleBulkMarkReady}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
@@ -454,7 +442,7 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
               Mark Ready
             </button>
           )}
-          {kot.status === KOT_STATUS.READY && (
+          {kotStatus === KOT_STATUS.READY && (
             <button
               onClick={handleBulkCompleteOrder}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
@@ -485,9 +473,7 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
                           Qty: {item.quantity}
                         </span>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getItemStatusColor(item.status)}`}>
-                          {(typeof item.status === 'string' ? item.status : 
-                            (typeof item.status === 'object' && item.status.status) ? item.status.status : 
-                            'pending').toUpperCase()}
+                          {String(item.status || 'pending').toUpperCase()}
                         </span>
                         {item.category && (
                           <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
@@ -523,13 +509,22 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
 
                     <div className="flex gap-2">
                       {item.status === ITEM_STATUS.PENDING && (
-                        <button
-                          onClick={() => updateItemStatus(itemId, ITEM_STATUS.PREPARING)}
-                          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm flex items-center gap-1"
-                        >
-                          <Play className="w-3 h-3" />
-                          Start
-                        </button>
+                        <>
+                          <button
+                            onClick={() => updateItemStatus(itemId, ITEM_STATUS.PREPARING)}
+                            className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm flex items-center gap-1"
+                          >
+                            <Play className="w-3 h-3" />
+                            Start
+                          </button>
+                          <button
+                            onClick={() => updateItemStatus(itemId, ITEM_STATUS.CANCELLED)}
+                            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm flex items-center gap-1"
+                          >
+                            <X className="w-3 h-3" />
+                            Cancel
+                          </button>
+                        </>
                       )}
                       {item.status === ITEM_STATUS.PREPARING && (
                         <>
@@ -547,16 +542,32 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
                             <Pause className="w-3 h-3" />
                             Pause
                           </button>
+                          <button
+                            onClick={() => updateItemStatus(itemId, ITEM_STATUS.CANCELLED)}
+                            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm flex items-center gap-1"
+                          >
+                            <X className="w-3 h-3" />
+                            Cancel
+                          </button>
                         </>
                       )}
                       {item.status === ITEM_STATUS.READY && (
-                        <button
-                          onClick={() => updateItemStatus(itemId, ITEM_STATUS.COMPLETED)}
-                          className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors text-sm flex items-center gap-1"
-                        >
-                          <CheckCircle className="w-3 h-3" />
-                          Complete
-                        </button>
+                        <>
+                          <button
+                            onClick={() => updateItemStatus(itemId, ITEM_STATUS.COMPLETED)}
+                            className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors text-sm flex items-center gap-1"
+                          >
+                            <CheckCircle className="w-3 h-3" />
+                            Complete
+                          </button>
+                          <button
+                            onClick={() => updateItemStatus(itemId, ITEM_STATUS.CANCELLED)}
+                            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors text-sm flex items-center gap-1"
+                          >
+                            <X className="w-3 h-3" />
+                            Cancel
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>

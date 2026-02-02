@@ -2,9 +2,7 @@ import React, { useState, useMemo } from "react";
 
 import { formatItems, getTotal, formatDate, formatDuration, getCustomerName } from "../../helpers/adminFormatters";
 
-
-
-export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLocalStatus, onToggleExpand, onDeleteLocalOrder }) {
+const OrderRow = React.memo(function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLocalStatus, onToggleExpand, onDeleteLocalOrder }) {
 
   const isLocal = order?.source === "local";
 
@@ -14,10 +12,15 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
   const timer = order.acceptedAt ? formatDuration(order.acceptedAt, durationEnd, now) : "—";
 
+  // ✅ OPTIMIZATION: Memoize expensive calculations
+  const formattedItems = useMemo(() => formatItems(order.items), [order.items]);
+  const orderTotal = useMemo(() => getTotal(order), [order]);
+
+  // ✅ FIX: Add canonical status resolver
+  const displayStatus = typeof order.status === 'string' ? order.status : order.status?.status || 'pending';
+
   const statusStyle = (() => {
-    const s = typeof order.status === 'string' ? order.status.toLowerCase() : 
-              (typeof order.status === 'object' && order.status.status) ? order.status.status.toLowerCase() : 
-              '';
+    const s = displayStatus.toLowerCase();
     const map = {
       pending: "bg-yellow-100 text-yellow-800",
       confirmed: "bg-blue-100 text-blue-800",
@@ -32,62 +35,69 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
     return map[s] || "bg-gray-100 text-gray-700";
   })();
 
-  const onSet = (status) => {
+  // ✅ FIX: Extract canonical id outside onSet to make it available in JSX scope
+  const orderId = order.id || order._id;
 
-    console.log('🔄 onSet called with status:', status, 'for order:', order._id);
-    console.log('🔄 Current order status:', order.status);
+  // 🧪 OPTIONAL: Freeze order in development to detect mutations
+  if (process.env.NODE_ENV === 'development') {
+    Object.freeze(order);
+  }
+
+  if (!orderId) {
+    console.error('❌ Missing order id', order);
+    // Return a safe fallback component
+    return (
+      <tr className="border-b border-gray-200 hover:bg-gray-50">
+        <td colSpan="6" className="px-4 py-3 text-center text-red-600">
+          Error: Missing order ID
+        </td>
+      </tr>
+    );
+  }
+
+  const onSet = (status) => {
+    console.log('🔄 onSet called with status:', status, 'for order:', orderId);
+    console.log('🔄 Current order status:', displayStatus);
     console.log('🔄 Order details:', {
+      id: order.id,
       _id: order._id,
-      currentStatus: order.status,
+      orderId: orderId,
+      currentStatus: displayStatus,
       isLocal: isLocal,
       kotCompleted: order.kotCompleted,
       kotId: order.kotId
     });
 
     console.log('onUpdateLocalStatus type:', typeof onUpdateLocalStatus);
-
     console.log('onUpdateStatus type:', typeof onUpdateStatus);
 
-
-
     if (isLocal) {
-
       if (!onUpdateLocalStatus) {
-
         console.error('onUpdateLocalStatus is not defined!');
-
         return;
-
       }
 
-      console.log('Calling onUpdateLocalStatus with:', order._id, status);
+      console.log('Calling onUpdateLocalStatus with:', orderId, status);
 
-      const result = onUpdateLocalStatus(order._id, status);
+      const result = onUpdateLocalStatus(orderId, status);
 
       console.log('onUpdateLocalStatus returned:', result);
 
       return result;
-
     }
-
-
 
     if (!onUpdateStatus) {
-
       console.error('onUpdateStatus is not defined!');
-
       return;
-
     }
 
-    console.log('Calling onUpdateStatus with:', order._id, status);
+    console.log('Calling onUpdateStatus with:', orderId, status);
 
-    const result = onUpdateStatus(order._id, status);
+    const result = onUpdateStatus(orderId, status);
 
     console.log('onUpdateStatus returned:', result);
 
     return result;
-
   };
 
   const Action = ({ label, title, color, onClick, ariaLabel }) => {
@@ -149,9 +159,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
   };
 
   const renderActions = useMemo(() => {
-    const s = typeof order.status === 'string' ? order.status.toLowerCase() : 
-              (typeof order.status === 'object' && order.status.status) ? order.status.status.toLowerCase() : 
-              '';
+    const s = displayStatus.toLowerCase();
 
     if (tab === "Local") {
 
@@ -165,7 +173,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
               e.stopPropagation();
 
-              console.log('Local tab R button clicked - marking ready:', order._id);
+              console.log('Local tab R button clicked - marking ready:', orderId);
 
               onSet("ready");
 
@@ -178,7 +186,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
               e.stopPropagation();
 
-              console.log('Local tab P button clicked - marking paid:', order._id);
+              console.log('Local tab P button clicked - marking paid:', orderId);
 
               onSet("paid");
 
@@ -191,7 +199,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
               e.stopPropagation();
 
-              console.log('Local tab A button clicked - archiving:', order._id);
+              console.log('Local tab A button clicked - archiving:', orderId);
 
               onSet("archived");
 
@@ -204,7 +212,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
               e.stopPropagation();
 
-              console.log('Local tab X button clicked - cancelling order:', order._id, 'current status:', s);
+              console.log('Local tab X button clicked - cancelling order:', orderId, 'current status:', s);
 
               onSet("cancelled");
 
@@ -227,7 +235,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
             e.stopPropagation();
 
-            console.log('Main tab ✓ button clicked - accepting:', order._id);
+            console.log('Main tab ✓ button clicked - accepting:', orderId);
 
             onSet("accepted");
 
@@ -241,7 +249,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
             e.stopPropagation();
 
-            console.log('Main tab R button clicked - marking ready:', order._id);
+            console.log('Main tab R button clicked - marking ready:', orderId);
 
             onSet("ready");
 
@@ -255,7 +263,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
             e.stopPropagation();
 
-            console.log('Main tab P button clicked - marking paid:', order._id);
+            console.log('Main tab P button clicked - marking paid:', orderId);
 
             onSet("paid");
 
@@ -269,7 +277,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
             e.stopPropagation();
 
-            console.log('Main tab A button clicked - archiving:', order._id);
+            console.log('Main tab A button clicked - archiving:', orderId);
 
             onSet("archived");
 
@@ -285,7 +293,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
           console.log('X button visibility check:', {
 
-            orderId: order._id,
+            orderId: orderId,
 
             currentStatus: s,
 
@@ -307,7 +315,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
             e.stopPropagation();
 
-            console.log('X button clicked - cancelling order:', order._id, 'current status:', s);
+            console.log('X button clicked - cancelling order:', orderId, 'current status:', s);
 
             onSet("cancelled");
 
@@ -451,9 +459,9 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
         className="px-2.5 py-2.5 border-b border-gray-200 align-middle whitespace-nowrap overflow-hidden cursor-pointer select-none"
 
-        title={formatItems(order.items)}
+        title={formattedItems}
 
-        onClick={() => onToggleExpand?.(order._id)}
+        onClick={() => onToggleExpand?.(orderId)}
 
         role="button"
 
@@ -461,7 +469,7 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
         <span className="flex items-center gap-2 min-w-0">
 
-          <span className="flex-1 min-w-0 truncate align-middle">{formatItems(order.items)}</span>
+          <span className="flex-1 min-w-0 truncate align-middle">{formattedItems}</span>
 
           {isLocal && (
 
@@ -481,16 +489,14 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
       </td>
 
-      <td className="px-2.5 py-2.5 border-b border-gray-200 align-middle font-medium">₹{getTotal(order)}</td>
+      <td className="px-2.5 py-2.5 border-b border-gray-200 align-middle font-medium">₹{orderTotal}</td>
 
       <td className="px-2.5 py-2.5 border-b border-gray-200 align-middle">
 
         <span className="inline-flex items-center gap-2">
 
           <span className={`h-5 inline-flex items-center px-2 rounded-full text-[10px] font-semibold ${statusStyle}`}>
-            {typeof order.status === 'string' ? order.status : 
-             (typeof order.status === 'object' && order.status.status) ? order.status.status : 
-             'Unknown'}
+            {displayStatus}
           </span>
 
         </span>
@@ -515,5 +521,6 @@ export default function OrderRow({ order, tab, now, onUpdateStatus, onUpdateLoca
 
   );
 
-}
+});
 
+export default OrderRow;
