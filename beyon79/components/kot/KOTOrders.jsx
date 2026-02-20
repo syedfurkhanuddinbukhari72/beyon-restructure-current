@@ -178,24 +178,19 @@ const KOTOrders = ({ kotData, onKOTSelect, onStatusUpdate }) => {
                   </td>
                 </tr>
               ) : (
-                filteredKOTs.map((kot) => {
+                filteredKOTs.map((kot, index) => {
                   const status = getStatus(kot);
                   const priority = getPriority(kot);
-                  const readyItems = kot.items?.filter(item => 
+                  const readyItems = Array.isArray(kot.items) ? kot.items.filter(item => 
                     item.status === 'ready' || item.status === 'completed'
-                  ).length || 0;
+                  ).length : 0;
                   
                   return (
-                    <tr key={kot.id} className="hover:bg-gray-50">
+                    <tr key={`${kot.source}-${kot.id}-${kot.createdAt || index}`} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          {kot.id}
+                          {String(kot.id ?? 'UNKNOWN')}
                         </div>
-                        {kot.orderId && kot.orderId !== kot.id && (
-                          <div className="text-xs text-gray-500">
-                            Order: {kot.orderId}
-                          </div>
-                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
@@ -204,17 +199,17 @@ const KOTOrders = ({ kotData, onKOTSelect, onStatusUpdate }) => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border ${getStatusColor(status)}`}>
-                          {status.toUpperCase()}
+                          {String(status).toUpperCase()}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityColor(priority)}`}>
-                          {priority.toUpperCase()}
+                          {String(priority).toUpperCase()}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-900">
-                          {kot.items?.length || 0} items
+                          {Array.isArray(kot.items) ? kot.items.length : 0} items
                           {readyItems > 0 && (
                             <span className="text-green-600 ml-1">
                               ({readyItems} ready)
@@ -222,8 +217,8 @@ const KOTOrders = ({ kotData, onKOTSelect, onStatusUpdate }) => {
                           )}
                         </div>
                         <div className="text-xs text-gray-500 max-w-xs truncate">
-                          {kot.items?.slice(0, 2).map(item => item.name).join(', ')}
-                          {kot.items?.length > 2 && '...'}
+                          {Array.isArray(kot.items) ? kot.items.slice(0, 2).map(item => item.name || 'Unknown Item').join(', ') : ''}
+                          {Array.isArray(kot.items) && kot.items.length > 2 && '...'}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

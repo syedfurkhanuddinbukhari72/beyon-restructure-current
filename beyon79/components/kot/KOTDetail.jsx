@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, ChefHat, CheckCircle, AlertCircle, Play, Pause, X, Edit2, Save, User, Timer } from 'lucide-react';
 import { KOT_STATUS, ITEM_STATUS, PRIORITY, KOTHelpers } from '../../models/kotModel';
+import { getTotal } from '../../helpers/adminFormatters';
 
 const KOTDetail = ({ kot, onUpdate, onClose }) => {
   const [editingNotes, setEditingNotes] = useState(false);
@@ -106,13 +107,13 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
     const hasCompletedItems = updatedItems.some(item => item.status === ITEM_STATUS.COMPLETED);
     const hasPendingItems = updatedItems.some(item => item.status === ITEM_STATUS.PENDING);
     const hasCancelledItems = updatedItems.some(item => item.status === ITEM_STATUS.CANCELLED);
-    
+
     // Count active (non-cancelled) items for completion logic
     const activeItems = updatedItems.filter(item => item.status !== ITEM_STATUS.CANCELLED);
-    const allCompleted = activeItems.length > 0 && activeItems.every(item => 
+    const allCompleted = activeItems.length > 0 && activeItems.every(item =>
       item.status === ITEM_STATUS.COMPLETED
     );
-    const allReady = activeItems.length > 0 && activeItems.every(item => 
+    const allReady = activeItems.length > 0 && activeItems.every(item =>
       item.status === ITEM_STATUS.READY || item.status === ITEM_STATUS.COMPLETED
     );
 
@@ -322,12 +323,12 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
     <div className="bg-white h-full flex flex-col">
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <h2 className="text-2xl font-bold text-gray-900">{String(kot.id ?? 'UNKNOWN')}</h2>
-          <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getItemStatusColor(kotStatus)}`}>
-            {String(kotStatus || 'pending').toUpperCase()}
-          </span>
+            <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getItemStatusColor(kotStatus)}`}>
+              {String(kotStatus || 'pending').toUpperCase()}
+            </span>
             <span className={`px-3 py-1 rounded-full text-sm font-medium ${getPriorityColor(kot.priority)}`}>
               {String(kot.priority || 'normal').toUpperCase()}
             </span>
@@ -346,20 +347,22 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
           </button>
         </div>
 
-        <div className="flex items-center gap-6 mt-3 text-sm text-gray-600">
-          <span>{kot.orderType}</span>
-          <span>{kot.items.length} items</span>
-          <span>₹{kot.totalAmount}</span>
-          <span className="flex items-center gap-1">
-            <Clock className="w-4 h-4" />
-            {new Date(kot.createdAt).toLocaleTimeString()}
-          </span>
-          {kot.estimatedTime && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-6 text-sm text-gray-600">
+            <span>{kot.orderType}</span>
+            <span>{kot.items.length} items</span>
+            <span>₹{getTotal(kot)}</span>
             <span className="flex items-center gap-1">
-              <Timer className="w-4 h-4" />
-              Est. {kot.estimatedTime}m
+              <Clock className="w-4 h-4" />
+              {new Date(kot.createdAt).toLocaleTimeString()}
             </span>
-          )}
+            {kot.estimatedTime && (
+              <span className="flex items-center gap-1">
+                <Timer className="w-4 h-4" />
+                Est. {kot.estimatedTime}m
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -376,7 +379,7 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
             </button>
           )}
         </div>
-        
+
         {editingNotes ? (
           <div className="mt-2">
             <textarea
@@ -462,7 +465,7 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
             {kot.items.map((item, index) => {
               // Ensure each item has a unique ID
               const itemId = item.id || `${kot.id}-item-${index}`;
-              
+
               return (
                 <div key={itemId} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex items-center justify-between">
@@ -470,7 +473,7 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
                       <div className="flex items-center gap-3 mb-2">
                         <h4 className="font-medium text-gray-900">{item.name}</h4>
                         <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
-                          Qty: {item.quantity}
+                          Qty: {item.quantity || item.qty || 1}
                         </span>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getItemStatusColor(item.status)}`}>
                           {String(item.status || 'pending').toUpperCase()}
@@ -481,10 +484,26 @@ const KOTDetail = ({ kot, onUpdate, onClose }) => {
                           </span>
                         )}
                       </div>
-                      
+
                       <div className="flex items-center gap-4 text-sm text-gray-600">
-                        <span>₹{item.unitPrice} each</span>
-                        <span>₹{item.unitPrice * item.quantity} total</span>
+                        <span>₹{(() => {
+                          const price = item.unitPrice || item.price || 0;
+                          // Fallback: If price is 0, single item, and order has total, use that
+                          if (price === 0 && kot.items.length === 1 && getTotal(kot) > 0) {
+                            return getTotal(kot);
+                          }
+                          return price;
+                        })()} each</span>
+                        <span>₹{(() => {
+                          const price = item.unitPrice || item.price || 0;
+                          const qty = item.quantity || item.qty || 1;
+                          const itemTotal = price * qty;
+
+                          if (itemTotal === 0 && kot.items.length === 1 && getTotal(kot) > 0) {
+                            return getTotal(kot);
+                          }
+                          return itemTotal;
+                        })()} total</span>
                         {item.preparationTime && (
                           <span className="flex items-center gap-1">
                             <Clock className="w-4 h-4" />

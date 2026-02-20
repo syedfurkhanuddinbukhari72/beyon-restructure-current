@@ -70,7 +70,7 @@ const OrdersTab = ({
     // Log each order being rendered
     console.log('📋 OrdersTab - Rendering orders:');
     filteredOrders.forEach((o, i) => {
-      console.log(`  ${i+1}. ${o._id} - Status: ${o.status}, kotCompleted: ${o.kotCompleted}, Source: ${o.source}`);
+      console.log(`  ${i + 1}. ${o._id} - Status: ${o.status}, kotCompleted: ${o.kotCompleted}, Source: ${o.source}`);
     });
   }
 
@@ -92,11 +92,10 @@ const OrdersTab = ({
 
   return (
     <div className="overflow-x-auto scrollbar-orange">
-      <table 
-        role="table" 
-        className={`border border-gray-200 w-full text-[13px] table-fixed bg-white rounded-lg overflow-hidden text-gray-800 border-collapse ${
-          tab === 'Archived' ? 'min-w-[940px]' : 'min-w-[1100px]'
-        }`}
+      <table
+        role="table"
+        className={`border border-gray-200 w-full text-[13px] table-fixed bg-white rounded-lg overflow-hidden text-gray-800 border-collapse ${tab === 'Archived' ? 'min-w-[940px]' : 'min-w-[1100px]'
+          }`}
       >
         <colgroup>
           <col className="w-[140px]" />
@@ -122,12 +121,14 @@ const OrdersTab = ({
         </thead>
         <tbody>
           {filteredOrders.map((o) => {
-            const isExpanded = expandedOrderId === o._id;
-            
+            // ✅ FIX: Use consistent ID fallback matching OrderRow
+            const orderIdentifier = o._id || o.id;
+            const isExpanded = expandedOrderId === orderIdentifier;
+
             // 🔥 NEW: Handle virtual cancelled items
             if (o.orderType === 'cancelled-item') {
               return (
-                <tr key={o._id} className="bg-red-50 hover:bg-red-100">
+                <tr key={orderIdentifier} className="bg-red-50 hover:bg-red-100">
                   <td className="px-2.5 py-2.5 border-b border-gray-200 align-middle">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-red-700">
@@ -166,7 +167,7 @@ const OrdersTab = ({
                 </tr>
               );
             }
-            
+
             if (isExpanded) {
               // Render a single replacement row with detailed items
               const items = Array.isArray(o.items) ? o.items : [];
@@ -190,15 +191,22 @@ const OrdersTab = ({
                               const name = it?.name || 'Item';
                               const qty = Number(it?.quantity || it?.qty || 1);
                               const status = it?.status || 'pending';
-                              
-                              // 🔥 KOT STATUS INDICATORS
+
+                              // � DEBUG: Log item status
+                              console.log('🔍 OrdersTab Item:', {
+                                name,
+                                status,
+                                fullItem: it
+                              });
+
+                              // �🔥 KOT STATUS INDICATORS
                               let statusIcon = null;
                               if (status === 'ready' || status === 'completed') {
                                 statusIcon = <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 text-green-700 text-xs font-bold ml-2">✓</span>;
                               } else if (status === 'cancelled') {
                                 statusIcon = <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-100 text-red-700 text-xs font-bold ml-2">✗</span>;
                               }
-                              
+
                               const line = `${name} x${qty}`;
                               return (
                                 <li key={idx} className="flex items-center justify-between">

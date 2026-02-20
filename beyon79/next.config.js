@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Use export output for static HTML generation instead of standalone
-  output: 'export',
+  // output: 'export', // Commented out for development to allow API routes
   // Do not emit production browser source maps (avoid shipping original sources)
   productionBrowserSourceMaps: false,
   // Removed static export options for dev server

@@ -35,40 +35,44 @@ export const mapOrderStatusToKOTStatus = (orderStatus) => {
 export const useFilteredOrders = (orders, tab) => {
   return useMemo(() => {
     console.log(`🔍 useFilteredOrders - filtering ${orders.length} orders for tab: ${tab}`);
-    
+
     // ✅ STEP 1: Fix validation - don't reject valid orders
     const isRenderableOrder = (order) =>
       order &&
       typeof order.id === 'string' &&
       Array.isArray(order.items);
-    
+
     orders = orders.filter(isRenderableOrder);
     console.log(`🛡️ After validation: ${orders.length} remaining`);
-    
+
     // 🛠️ Fix #2: Filter before size check for Local tab
     const localOrders = orders.filter(o => o.source === 'local');
-    
+
     if (tab === 'Local') {
       console.log('✅ Local tab - showing local orders only:', localOrders.length);
       return localOrders;
     }
-    
+
     // 🛠️ Fix #1: Allow Local tab, short-circuit other non-critical tabs
     if (orders.length > 5000 && tab !== 'KOT') {
       console.log('🚫 Large dataset, short-circuiting for non-critical tab:', tab);
       return [];
     }
-    
+
     let filteredOrders = [];
-    
+
     switch (tab) {
       case 'Ready':
         console.log('🎯 Ready tab filtering - checking orders...');
         filteredOrders = orders.filter(order => {
-          const extractedStatus = getOrderStatus(order);
-          const isReady = extractedStatus === 'ready' || 
-                         (order.kotCompleted === true && extractedStatus !== 'paid' && extractedStatus !== 'archived' && extractedStatus !== 'cancelled');
-          return isReady;
+          const s = getOrderStatus(order).toLowerCase();
+
+          // ✅ FIX: It is ready if status says so, OR if KOT marked it done
+          // But exclude final states like paid/archived/cancelled
+          const isReady = (s === 'ready' || order.kotCompleted === true);
+          const isFinal = ['paid', 'archived', 'cancelled'].includes(s);
+
+          return isReady && !isFinal;
         });
         console.log(`🎯 Ready tab filtered ${filteredOrders.length} orders`);
         break;
@@ -82,7 +86,16 @@ export const useFilteredOrders = (orders, tab) => {
         console.log(`⚡ Active tab filtered ${filteredOrders.length} orders`);
         break;
       case 'Local':
-        filteredOrders = orders.filter(order => order.source === 'local');
+        // Show both local orders and KOT orders
+        filteredOrders = orders.filter(order =>
+          order.source === 'local' || order.source === 'kot'
+        );
+        console.log(`🏠 Local tab filtered ${filteredOrders.length} orders (local + KOT)`);
+        console.log('🏠 Local tab orders:', filteredOrders.map(o => ({
+          id: o._id,
+          source: o.source,
+          status: o.status
+        })));
         break;
       case 'Paid':
         filteredOrders = orders.filter(order => {
@@ -102,20 +115,20 @@ export const useFilteredOrders = (orders, tab) => {
         filteredOrders = orders.filter(order => {
           const extractedStatus = getOrderStatus(order);
           const isCancelled = extractedStatus === 'cancelled';
-          
+
           // 🔥 NEW: Also include orders with cancelled items from KOT
           const hasCancelledItems = order.items && order.items.some(item => item.status === 'cancelled');
-          
+
           return isCancelled || hasCancelledItems;
         });
-        
+
         // 🔥 NEW: For orders with cancelled items, create virtual cancelled items
         const ordersWithCancelledItems = filteredOrders.filter(order => {
           const isFullyCancelled = getOrderStatus(order) === 'cancelled';
           const hasCancelledItems = order.items && Array.isArray(order.items) && order.items.some(item => item.status === 'cancelled');
           return !isFullyCancelled && hasCancelledItems;
         });
-        
+
         // Create virtual cancelled item entries
         const virtualCancelledItems = ordersWithCancelledItems.flatMap(order => {
           if (!order.items || !Array.isArray(order.items)) return [];
@@ -135,11 +148,11 @@ export const useFilteredOrders = (orders, tab) => {
             tableNumber: order.tableNumber || '—'
           }));
         });
-        
+
         // Combine fully cancelled orders with virtual cancelled items
         const fullyCancelledOrders = filteredOrders.filter(order => getOrderStatus(order) === 'cancelled');
         filteredOrders = [...fullyCancelledOrders, ...virtualCancelledItems];
-        
+
         console.log('🚫 Cancelled tab filtered:', {
           fullyCancelledOrders: fullyCancelledOrders.length,
           virtualCancelledItems: virtualCancelledItems.length,
@@ -173,10 +186,10 @@ export const useFilteredOrders = (orders, tab) => {
             originalStatus: order.status,
             mappedStatus: mappedStatus
           });
-          
+
           return {
-            id: order.kotId 
-              || order._id 
+            id: order.kotId
+              || order._id
               || `local-${order.createdAt}-${Math.random().toString(36).substr(2, 9)}`,
             orderId: order._id,
             status: mappedStatus, // STRING ONLY
@@ -205,7 +218,7 @@ export const useFilteredOrders = (orders, tab) => {
           }
         });
         filteredOrders = Array.from(uniqueById.values());
-        
+
         console.log('🔧 After deduplication:', {
           before: uniqueById.size,
           after: filteredOrders.length,
@@ -217,14 +230,14 @@ export const useFilteredOrders = (orders, tab) => {
           console.log('🚫 useFilteredOrders - KOT tab has no filtered results, returning empty array');
           return [];
         }
-        
+
         break;
       default:
         filteredOrders = [];
     }
-    
+
     console.log(`🔍 useFilteredOrders - result: ${filteredOrders.length} orders`);
-    
+
     // Sort by createdAt (newest first)
     return filteredOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [orders, tab]);

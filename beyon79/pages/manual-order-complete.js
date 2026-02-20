@@ -6,6 +6,7 @@ import offersSeed from "../data/offers.json";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { getMenu, getOffersRules, upsertLocalOrder } from "../src/localDataService";
+import { normalizeOrder } from '../helpers/normalizeOrder';
 import ItemsGrid from '../components/manual-order/ItemsGrid';
 import CartSheet from '../components/manual-order/CartSheet';
 import BillModal from '../components/manual-order/BillModal';
@@ -765,20 +766,24 @@ export default function ManualOrderPage() {
           ? { customerNumber }
           : {}),
         note,
-        status: "preparing", // 🔥 KEY: Promote manual orders directly to KOT state
+        status: "pending", // 🔥 FIX: Start with pending so Confirm All button shows
         total: totalAmount,
         createdAt: new Date().toISOString(),
         source: "local",
       };
 
       // ✅ FIXED: Ensure manual order HAS items (critical for KOT)
-      const orderToSave = {
-        ...orderPayload,
+      const orderToSave = normalizeOrder({
+        id: `local-${Date.now()}`,
+        source: 'local',
         items: Array.isArray(orderPayload.items) ? orderPayload.items : cart,
         total: orderPayload.total ?? totalAmount,
-        source: 'local',
-        status: 'preparing' // 🔥 KEY: Promote manual orders directly to KOT state
-      };
+        customerName: customerName || 'Guest',
+        notes: note || '',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        ...orderPayload
+      });
 
       // Save order locally using localDataService
       const savedOrder = await upsertLocalOrder(orderToSave);

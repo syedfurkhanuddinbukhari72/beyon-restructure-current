@@ -21,7 +21,7 @@ const KOTQueue = ({ kotData, onKOTSelect, onStatusUpdate }) => {
           kot.id.toLowerCase().includes(searchLower) ||
           kot.tableNumber?.toLowerCase().includes(searchLower) ||
           kot.customerName?.toLowerCase().includes(searchLower) ||
-          kot.items.some(item => item.name.toLowerCase().includes(searchLower))
+          kot.items?.some(item => item.name?.toLowerCase().includes(searchLower))
         );
       }
       
@@ -267,14 +267,10 @@ const KOTQueue = ({ kotData, onKOTSelect, onStatusUpdate }) => {
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="font-semibold text-gray-900">{kot.id}</h3>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(kot.status)}`}>
-                        {(typeof kot.status === 'string' ? kot.status : 
-                          (typeof kot.status === 'object' && kot.status.status) ? kot.status.status : 
-                          'PENDING').toUpperCase()}
+                        {String(kot.status || 'pending').toUpperCase()}
                       </span>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(kot.priority)}`}>
-                        {(typeof kot.priority === 'string' ? kot.priority : 
-                          (typeof kot.priority === 'object' && kot.priority.priority) ? kot.priority.priority : 
-                          'normal').toUpperCase()}
+                        {String(kot.priority || 'normal').toUpperCase()}
                       </span>
                       {kot.tableNumber && (
                         <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">
@@ -288,7 +284,7 @@ const KOTQueue = ({ kotData, onKOTSelect, onStatusUpdate }) => {
                     
                     <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
                       <span>{kot.items.length} items</span>
-                      <span>₹{kot.totalAmount}</span>
+                      <span>₹{kot.total}</span>
                       <span className={getTimeColor(kot.createdAt, kot.estimatedTime)}>
                         <Clock className="w-4 h-4 inline mr-1" />
                         {getElapsedTime(kot.createdAt)}

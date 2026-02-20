@@ -8,16 +8,20 @@
     "export": "next build",
     "web:build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
-    "process": "^0.11.10",
     "@heroicons/react": "^2.2.0",
+    "@tanstack/react-query-devtools": "^5.91.3",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.2",
     "localforage": "^1.10.0",
     "lucide-react": "^0.544.0",
     "next": "15.4.6",
+    "process": "^0.11.10",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-icons": "^5.5.0"

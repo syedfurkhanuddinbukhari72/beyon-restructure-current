@@ -35,8 +35,8 @@ const OrderRow = React.memo(function OrderRow({ order, tab, now, onUpdateStatus,
     return map[s] || "bg-gray-100 text-gray-700";
   })();
 
-  // ✅ FIX: Extract canonical id outside onSet to make it available in JSX scope
-  const orderId = order.id || order._id;
+  // ✅ FIX: Extract canonical id outside onSet - prefer _id to match OrdersTab
+  const orderId = order._id || order.id;
 
   // 🧪 OPTIONAL: Freeze order in development to detect mutations
   if (process.env.NODE_ENV === 'development') {
@@ -311,17 +311,17 @@ const OrderRow = React.memo(function OrderRow({ order, tab, now, onUpdateStatus,
 
         })() && (
 
-          <Action label="×" title="Cancel Order" color="red" ariaLabel="Cancel order" onClick={(e) => {
+            <Action label="×" title="Cancel Order" color="red" ariaLabel="Cancel order" onClick={(e) => {
 
-            e.stopPropagation();
+              e.stopPropagation();
 
-            console.log('X button clicked - cancelling order:', orderId, 'current status:', s);
+              console.log('X button clicked - cancelling order:', orderId, 'current status:', s);
 
-            onSet("cancelled");
+              onSet("cancelled");
 
-          }} />
+            }} />
 
-        )}
+          )}
 
         {/* Print button: uses electronAPI.printReceipt when available, otherwise opens print page */}
 
@@ -335,7 +335,8 @@ const OrderRow = React.memo(function OrderRow({ order, tab, now, onUpdateStatus,
 
           ariaLabel="Print receipt"
 
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
 
             try {
 
@@ -385,7 +386,10 @@ const OrderRow = React.memo(function OrderRow({ order, tab, now, onUpdateStatus,
 
   return (
 
-    <tr className="odd:bg-white even:bg-gray-50 hover:bg-orange-50 transition-colors">
+    <tr
+      className="odd:bg-white even:bg-gray-50 hover:bg-orange-50 transition-colors cursor-pointer"
+      onClick={() => onToggleExpand?.(orderId)}
+    >
 
       <td className="px-2.5 py-2.5 border-b border-gray-200 align-middle">
 
@@ -403,7 +407,10 @@ const OrderRow = React.memo(function OrderRow({ order, tab, now, onUpdateStatus,
 
               className="w-[26px] h-[26px] inline-grid place-items-center rounded-full bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
 
-              onClick={() => setShowCustomerName((v) => !v)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowCustomerName((v) => !v);
+              }}
 
             >
 
@@ -457,13 +464,9 @@ const OrderRow = React.memo(function OrderRow({ order, tab, now, onUpdateStatus,
 
       <td
 
-        className="px-2.5 py-2.5 border-b border-gray-200 align-middle whitespace-nowrap overflow-hidden cursor-pointer select-none"
+        className="px-2.5 py-2.5 border-b border-gray-200 align-middle whitespace-nowrap overflow-hidden select-none"
 
         title={formattedItems}
-
-        onClick={() => onToggleExpand?.(orderId)}
-
-        role="button"
 
       >
 

@@ -272,6 +272,23 @@ export async function getLocalOrders() {
   return orders.filter(order => order.source === "local");
 }
 
+export async function deleteLocalOrder(orderId) {
+  if (!orderId) {
+    throw new Error("Order ID is required for deletion");
+  }
+
+  const orders = await getAllOrders();
+  const filteredOrders = orders.filter(order => order._id !== orderId);
+
+  if (orders.length === filteredOrders.length) {
+    throw new Error("Order not found");
+  }
+
+  await saveAllOrders(filteredOrders);
+  broadcastChange('orders');
+  return true;
+}
+
 export async function upsertLocalOrder(orderData) {
   if (!orderData || typeof orderData !== 'object') {
     throw new Error("Invalid order data");
@@ -300,13 +317,18 @@ export async function upsertLocalOrder(orderData) {
   return order;
 }
 
-export async function updateOrderStatus(orderId, status, timestamps = {}) {
-  if (!orderId || !status) {
+export async function updateOrderStatus(orderId, updates, timestamps = {}) {
+  if (!orderId || !updates) {
     throw new Error("Order ID and status are required");
   }
 
+  // Support both old API (string status) and new API (object with items, etc.)
+  const updateObj = typeof updates === 'string'
+    ? { status: updates, ...timestamps }
+    : { ...updates, ...timestamps };
+
   const orders = await getAllOrders();
-  const orderIndex = orders.findIndex(order => order._id === orderId);
+  const orderIndex = orders.findIndex(order => order.id === orderId || order._id === orderId);
 
   if (orderIndex === -1) {
     throw new Error(`Order with ID ${orderId} not found`);
@@ -314,9 +336,8 @@ export async function updateOrderStatus(orderId, status, timestamps = {}) {
 
   orders[orderIndex] = {
     ...orders[orderIndex],
-    status,
-    updatedAt: new Date().toISOString(),
-    ...timestamps
+    ...updateObj,
+    updatedAt: new Date().toISOString()
   };
 
   await saveAllOrders(orders);
@@ -468,6 +489,7 @@ export default {
   saveAllOrders,
   getBackendOrders,
   getLocalOrders,
+  deleteLocalOrder,
   upsertLocalOrder,
   updateOrderStatus,
   updateLocalOrderStatus,

@@ -4,3 +4,11 @@ dist/
 
 # Ignore duplicate lockfile in subproject to avoid warnings
 beyon79/package-lock.json
+.blackboxcli/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

@@ -2,74 +2,86 @@
   {
     "items": [
       {
-        "name": "Chicken Wrap",
+        "name": "Test Sandwich",
         "price": 120,
-        "qty": 2
-      },
-      {
-        "name": "Cheesy Chicken Wrap",
-        "price": 140,
-        "qty": 2
-      },
-      {
-        "name": "Chicken Popcorn (Large)",
-        "price": 0,
         "qty": 1
       }
     ],
-    "note": "",
+    "note": "Test order - 2 hours ago",
     "status": "pending",
-    "total": 520,
-    "createdAt": "2025-10-17T16:07:30.228Z",
+    "total": 120,
+    "createdAt": "2026-01-26T11:59:16.242Z",
     "source": "local",
-    "_id": "cc4df62d-2107-47c6-b1c4-655afd649837",
-    "updatedAt": "2025-10-17T16:07:30.228Z"
+    "_id": "test-order-2h",
+    "updatedAt": "2026-01-26T11:59:16.243Z"
   },
   {
     "items": [
       {
-        "name": "Paneer Sandwich",
-        "price": 90,
-        "qty": 1
-      },
-      {
-        "name": "Crispy Chicken Sandwich",
-        "price": 80,
-        "qty": 1
+        "name": "Test Burger",
+        "price": 150,
+        "qty": 2
       }
     ],
-    "note": "",
+    "note": "Test order - 30 minutes ago",
     "status": "pending",
-    "total": 240,
-    "createdAt": "2025-10-17T16:46:14.319Z",
+    "total": 300,
+    "createdAt": "2026-01-26T13:29:16.243Z",
     "source": "local",
-    "_id": "86f42294-47e1-4193-8639-9ca45f0ce878",
-    "updatedAt": "2025-10-17T16:46:14.319Z"
+    "_id": "test-order-30m",
+    "updatedAt": "2026-01-26T13:29:16.243Z"
   },
   {
     "items": [
       {
-        "name": "Chicken Wrap",
-        "price": 120,
-        "qty": 1
-      },
-      {
-        "name": "Cheesy Chicken Wrap",
+        "name": "Test Wrap",
         "price": 140,
-        "qty": 1
-      },
-      {
-        "name": "Veg Sandwich",
-        "price": 60,
         "qty": 1
       }
     ],
-    "note": "",
+    "note": "Test order - just now",
     "status": "pending",
-    "total": 320,
-    "createdAt": "2025-10-17T17:07:10.138Z",
+    "total": 140,
+    "createdAt": "2026-01-26T13:59:16.243Z",
     "source": "local",
-    "_id": "9b657431-3f0e-4c97-af92-3500435c9811",
-    "updatedAt": "2025-10-17T17:07:10.138Z"
+    "_id": "test-order-now",
+    "updatedAt": "2026-01-26T13:59:16.243Z"
+  },
+  {
+    "items": [
+      {
+        "name": "Completed KOT Order",
+        "price": 380,
+        "qty": 4
+      }
+    ],
+    "note": "KOT Order completed - should appear in Ready tab",
+    "status": "ready",
+    "total": 380,
+    "createdAt": "2026-01-28T16:49:00.000Z",
+    "source": "local",
+    "_id": "KOT-1769618963803-6QXT5KIX7",
+    "updatedAt": "2026-01-28T16:50:00.000Z",
+    "kotId": "KOT-1769618963803-6QXT5KIX7",
+    "kotStatus": "completed",
+    "readyItemsCount": 4,
+    "totalItemsCount": 4,
+    "kotCompleted": true
+  },
+  {
+    "items": [
+      {
+        "name": "Old Test Order",
+        "price": 100,
+        "qty": 1
+      }
+    ],
+    "note": "Test order - 25 hours ago (should be filtered out)",
+    "status": "pending",
+    "total": 100,
+    "createdAt": "2026-01-25T12:59:16.243Z",
+    "source": "local",
+    "_id": "test-order-25h",
+    "updatedAt": "2026-01-25T12:59:16.243Z"
   }
 ]

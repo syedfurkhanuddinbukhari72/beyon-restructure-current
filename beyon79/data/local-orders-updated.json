@@ -1,0 +1,140 @@
+[
+  {
+    "items": [
+      {
+        "name": "Test Sandwich",
+        "price": 120,
+        "qty": 1
+      }
+    ],
+    "note": "Test order - 2 hours ago",
+    "status": "pending",
+    "total": 120,
+    "createdAt": "2026-01-26T11:59:16.242Z",
+    "source": "local",
+    "_id": "test-order-2h",
+    "updatedAt": "2026-01-26T11:59:16.243Z"
+  },
+  {
+    "items": [
+      {
+        "name": "Test Burger",
+        "price": 150,
+        "qty": 2
+      }
+    ],
+    "note": "Test order - 30 minutes ago",
+    "status": "pending",
+    "total": 300,
+    "createdAt": "2026-01-26T13:29:16.243Z",
+    "source": "local",
+    "_id": "test-order-30m",
+    "updatedAt": "2026-01-26T13:29:16.243Z"
+  },
+  {
+    "items": [
+      {
+        "name": "Test Wrap",
+        "price": 140,
+        "qty": 1
+      }
+    ],
+    "note": "Test order - just now",
+    "status": "pending",
+    "total": 140,
+    "createdAt": "2026-01-26T13:59:16.243Z",
+    "source": "local",
+    "_id": "test-order-now",
+    "updatedAt": "2026-01-26T13:59:16.243Z"
+  },
+  {
+    "items": [
+      {
+        "name": "Completed KOT Order",
+        "price": 380,
+        "qty": 4
+      }
+    ],
+    "note": "KOT Order completed - should appear in Ready tab",
+    "status": "ready",
+    "total": 380,
+    "createdAt": "2026-01-28T16:49:00.000Z",
+    "source": "local",
+    "_id": "KOT-1769618963803-6QXT5KIX7",
+    "updatedAt": "2026-01-28T16:50:00.000Z",
+    "kotId": "KOT-1769618963803-6QXT5KIX7",
+    "kotStatus": "completed",
+    "readyItemsCount": 4,
+    "totalItemsCount": 4,
+    "kotCompleted": true
+  },
+  {
+    "items": [
+      {
+        "name": "Pizza Order",
+        "price": 250,
+        "qty": 2
+      }
+    ],
+    "note": "Ready order - pizza completed",
+    "status": "ready",
+    "total": 500,
+    "createdAt": "2026-01-28T16:45:00.000Z",
+    "source": "local",
+    "_id": "ready-order-pizza",
+    "updatedAt": "2026-01-28T16:46:00.000Z"
+  },
+  {
+    "items": [
+      {
+        "name": "Pasta Order",
+        "price": 180,
+        "qty": 1
+      }
+    ],
+    "note": "KOT completed pasta order",
+    "status": "ready",
+    "total": 180,
+    "createdAt": "2026-01-28T16:40:00.000Z",
+    "source": "local",
+    "_id": "KOT-1769618963804-ABC123DEF",
+    "updatedAt": "2026-01-28T16:41:00.000Z",
+    "kotId": "KOT-1769618963804-ABC123DEF",
+    "kotStatus": "completed",
+    "readyItemsCount": 1,
+    "totalItemsCount": 1,
+    "kotCompleted": true
+  },
+  {
+    "items": [
+      {
+        "name": "Salad Order",
+        "price": 120,
+        "qty": 1
+      }
+    ],
+    "note": "Ready salad order",
+    "status": "ready",
+    "total": 120,
+    "createdAt": "2026-01-28T16:35:00.000Z",
+    "source": "local",
+    "_id": "ready-order-salad",
+    "updatedAt": "2026-01-28T16:36:00.000Z"
+  },
+  {
+    "items": [
+      {
+        "name": "Old Test Order",
+        "price": 100,
+        "qty": 1
+      }
+    ],
+    "note": "Test order - 25 hours ago (should be filtered out)",
+    "status": "pending",
+    "total": 100,
+    "createdAt": "2026-01-25T12:59:16.243Z",
+    "source": "local",
+    "_id": "test-order-25h",
+    "updatedAt": "2026-01-25T12:59:16.243Z"
+  }
+]

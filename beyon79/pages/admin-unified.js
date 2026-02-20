@@ -117,7 +117,7 @@ function AdminUnifiedPageContent() {
   useEffect(() => {
     // DISABLED: Test data import causing 278 orders to flood the system
     console.log("⏸️ Test data import disabled to prevent order flood");
-    
+
     // Only fetch if not on KOT tab (KOT tab has its own optimized fetch)
     if (tab !== 'KOT') {
       try {
@@ -130,7 +130,7 @@ function AdminUnifiedPageContent() {
     } else {
       console.log("⏸️ Skipping initial fetch - KOT tab will use optimized fetch");
     }
-    
+
   }, [tab]); // Add tab dependency to re-evaluate when tab changes
 
   // ✅ FIXED: KOT must use the SAME orders list as Local
@@ -162,68 +162,32 @@ function AdminUnifiedPageContent() {
   const filteredOrders = useFilteredOrders(orders, tab);
 
   // Create wrapper functions for compatibility
-  const updateStatus = async (orderId, status) => {
-    return updateOrder(orderId, { status, updatedAt: new Date().toISOString() });
-  };
-
-  // KOT Update Event Listener - Bridge between localStorage and localforage
-  useEffect(() => {
-    const handleKOTUpdate = async (event) => {
-      console.log('🔄 KOT update event received:', event.detail);
-      // Trigger order refresh to sync data
-      try {
-        await smartFetchOrders();
-      } catch (error) {
-        console.error('❌ Failed to refresh orders after KOT update:', error);
-      }
-    };
-
-    window.addEventListener('kot:updated', handleKOTUpdate);
-    return () => window.removeEventListener('kot:updated', handleKOTUpdate);
-  }, []); // Remove smartFetchOrders dependency to prevent infinite loop
-
-  const updateLocalStatus = async (orderId, status, localOrders, setLocalOrders, showToast) => {
+  // ✅ UNIFIED STATUS UPDATE HANDLER (Fixes Bug #1)
+  const handleUnifiedStatusUpdate = useCallback(async (orderId, status) => {
     try {
+      console.log(`🔄 Unified Update: Order ${orderId} -> ${status}`);
+
       const timestampField = (() => {
-        if (status === 'ready') return { readyAt: new Date().toISOString() };
-        if (status === 'paid') return { paidAt: new Date().toISOString() };
-        if (status === 'cancelled') return { cancelledAt: new Date().toISOString() };
-        if (status === 'archived') return { archivedAt: new Date().toISOString() };
+        const now = new Date().toISOString();
+        if (status === 'ready') return { readyAt: now };
+        if (status === 'paid') return { paidAt: now };
+        if (status === 'cancelled') return { cancelledAt: now };
+        if (status === 'archived') return { archivedAt: now };
         return {};
       })();
-      
-      // Use the new unified system
-      return updateOrder(orderId, { status, ...timestampField });
-    } catch (e) {
-      console.error(e);
-      // showToast is optional, so check if it exists before calling
-      if (showToast && typeof showToast === 'function') {
-        showToast(`Failed to update local order: ${e.message}`);
-      }
-    }
-  };
 
-  // Create a wrapper function for updateLocalStatus that works with new system
-  const handleUpdateLocalStatus = async (id, status) => {
-    try {
-      const timestampField = (() => {
-        if (status === 'ready') return { readyAt: new Date().toISOString() };
-        if (status === 'paid') return { paidAt: new Date().toISOString() };
-        if (status === 'cancelled') return { cancelledAt: new Date().toISOString() };
-        if (status === 'archived') return { archivedAt: new Date().toISOString() };
-        return {};
-      })();
-      
-      await updateOrder(id, { status, ...timestampField });
-      showToast(`Order ${id} status updated to ${status}`);
+      // Update the order in the unified hook
+      await updateOrder(orderId, { status, ...timestampField });
+
+      showToast(`Order updated to ${status}`);
     } catch (error) {
       console.error('Failed to update order:', error);
       showToast(`Failed to update order: ${error.message}`);
     }
-  };
+  }, [updateOrder, showToast]);
 
   // Create a delete function for local orders
-  const handleDeleteLocalOrder = async (orderId) => {
+  const handleDeleteLocalOrder = useCallback(async (orderId) => {
     if (!confirm('Are you sure you want to delete this order? This action cannot be undone.')) {
       return;
     }
@@ -231,10 +195,10 @@ function AdminUnifiedPageContent() {
     try {
       // Remove from local storage
       await localData.deleteLocalOrder(orderId);
-      
+
       // Refresh orders using smart fetch
       await smartFetchOrders();
-      
+
       showToast('Order deleted successfully');
     } catch (error) {
       console.error('Error deleting order:', error);
@@ -242,7 +206,7 @@ function AdminUnifiedPageContent() {
       // Refresh to restore correct state
       await smartFetchOrders();
     }
-  };
+  }, [smartFetchOrders, showToast]);
 
   // Offers management
   const {
@@ -291,7 +255,7 @@ function AdminUnifiedPageContent() {
     fetchShopStatus,
     hookFetchMenu,
     messageListenerRef,
-    () => {} // handleMessage will be handled by the keyboard shortcuts hook
+    () => { } // handleMessage will be handled by the keyboard shortcuts hook
   );
 
   // Debug filtered orders
@@ -654,11 +618,11 @@ function AdminUnifiedPageContent() {
               status: updatedOrder.status,
               kotCompleted: updatedOrder.kotCompleted
             });
-            
+
             try {
               // Check if this is an existing order or a new one
               const existingOrder = orders.find(order => order._id === updatedOrder._id);
-              
+
               if (existingOrder) {
                 // Update existing order
                 console.log('📝 Updating existing order:', updatedOrder._id);
@@ -684,8 +648,8 @@ function AdminUnifiedPageContent() {
           expandedOrderId={expandedOrderId}
           tab={tab}
           onToggleExpand={toggleExpand}
-          onUpdateStatus={updateStatus}
-          onUpdateLocalStatus={handleUpdateLocalStatus}
+          onUpdateStatus={handleUnifiedStatusUpdate}
+          onUpdateLocalStatus={handleUnifiedStatusUpdate} // Unified handler for both
           onDeleteLocalOrder={handleDeleteLocalOrder}
           now={now}
         />
@@ -703,9 +667,8 @@ function AdminUnifiedPageContent() {
       />
 
       {chShowToast && (
-        <div className={`fixed bottom-4 right-4 px-4 py-2 rounded-lg text-white font-medium z-50 ${
-          chToast.type === 'error' ? 'bg-red-500' : 'bg-green-500'
-        }`}>
+        <div className={`fixed bottom-4 right-4 px-4 py-2 rounded-lg text-white font-medium z-50 ${chToast.type === 'error' ? 'bg-red-500' : 'bg-green-500'
+          }`}>
           {chToast.message}
         </div>
       )}

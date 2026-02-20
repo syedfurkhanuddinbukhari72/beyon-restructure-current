@@ -28,11 +28,11 @@ export const useUnifiedOrderData = () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
 
-      // ❌ REMOVED: Dangerous legacy bridge code that was causing data pollution
-      // KOT must NEVER restore old data from localStorage
-      // Single source of truth - fetch from localforage only
+      // ❌ REMOVED: KOT "Bridge" Logic
+      // KOT data is now strictly part of the main Order object in LocalForage.
+      // We no longer sync from localStorage 'kotTabData'.
 
-      // Get all orders from localforage only
+      // Get all orders from localforage (now including KOT orders)
       const allOrders = await localData.getAllOrders();
 
       console.log('🔄 useUnifiedOrderData - fetched orders:', allOrders.length);
@@ -54,7 +54,7 @@ export const useUnifiedOrderData = () => {
 
       // ✅ STEP 3: Enforce retention AUTOMATICALLY (critical)
       const cleanedOrders = pruneOldOrders(allOrders);
-      
+
       dispatch({ type: 'SET_ORDERS', payload: cleanedOrders });
 
       return cleanedOrders;
@@ -76,10 +76,10 @@ export const useUnifiedOrderData = () => {
 
       // PERFORMANCE: Get all orders but filter immediately for KOT-relevant ones
       const allOrders = await localData.getAllOrders();
-      
+
       // PERFORMANCE: Apply time window filter first for large datasets
       let kotEligibleOrders = allOrders;
-      
+
       if (allOrders.length > 1000) {
         console.log('🍳 fetchKOTOrders - large dataset, applying time window filter first');
         const last60Min = Date.now() - 60 * 60 * 1000; // Last 60 minutes
@@ -89,12 +89,12 @@ export const useUnifiedOrderData = () => {
         });
         console.log(`🍳 Time window filtered to ${kotEligibleOrders.length} orders (last 60 min)`);
       }
-      
+
       // TEMP FIX: Filter for KOT-relevant orders using generic statuses
       const kotRelevantOrders = kotEligibleOrders.filter(order => {
         // MUST have a valid status
         if (!order.status) return false;
-        
+
         // DEBUG: Log first few orders to understand data structure
         if (kotEligibleOrders.indexOf(order) < 3) {
           console.log('🔍 DEBUG Order Sample:', {
@@ -104,27 +104,27 @@ export const useUnifiedOrderData = () => {
             createdAt: order.createdAt
           });
         }
-        
+
         // Include orders that would be relevant for kitchen operations
         // placed/paid = pending for kitchen
         // confirmed = preparing 
         // completed = ready (but only if recent)
-        
+
         if (['placed', 'paid'].includes(order.status)) {
           return true; // These are pending for kitchen
         }
-        
+
         if (['confirmed', 'preparing'].includes(order.status)) {
           return true; // These are being prepared
         }
-        
+
         // Only include completed orders if they're very recent (last 15 minutes)
         if (order.status === 'completed') {
           const orderTime = new Date(order.createdAt).getTime();
           const last15Min = Date.now() - 15 * 60 * 1000;
           return orderTime >= last15Min;
         }
-        
+
         return false;
       });
 
