@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog, shell, globalShortcut } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_DEV === 'true';
@@ -27,49 +27,7 @@ let mainWindow;
 const previewWindows = new Set();
 
 // Disable only developer tools shortcuts
-function disableDevTools() {
-  // Only block specific dev tools shortcuts, not our application shortcuts
-  const devToolsShortcuts = [
-    'F12',
-    'Ctrl+Shift+I',
-    'CmdOrCtrl+Alt+I',
-    'CmdOrCtrl+Shift+I',
-    'F8',
-    'CmdOrCtrl+Shift+C',
-    'CmdOrCtrl+Shift+J',
-    'CmdOrCtrl+Option+J',
-    'CmdOrCtrl+Option+I',
-    'CmdOrCtrl+Option+U',
-    'CmdOrCtrl+U',
-    'CmdOrCtrl+Shift+U'
-  ];
 
-  // Unregister any existing shortcuts to prevent conflicts
-  globalShortcut.unregisterAll();
-
-  // Block dev tools shortcuts
-  devToolsShortcuts.forEach(shortcut => {
-    globalShortcut.register(shortcut, () => {
-      console.log(`Developer shortcut ${shortcut} is disabled`);
-      return false;
-    });
-  });
-
-  // Re-register our application shortcuts
-  const appShortcuts = [
-    'Shift+A', // Active tab
-    'Shift+R', // Ready tab
-    'Shift+P', // Paid tab
-    'Shift+H', // History tab
-    'Shift+C', // Cancel order / open cart
-    'Shift+L', // Local orders
-    'Shift+Enter' // Place order
-  ];
-
-  appShortcuts.forEach(shortcut => {
-    globalShortcut.unregister(shortcut);
-  });
-}
 
 function createWindow() {
   const webPreferences = {
@@ -252,7 +210,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   // Disable dev tools shortcuts
-  disableDevTools();
+
 
   createWindow();
   // Register global shortcuts via manager
