@@ -44,12 +44,12 @@ The `admin-unified.js` file acts as a massive controller for Orders, Products, a
 *   **Action:** Move the "Products" tab content to its own URL.
 *   **Benefit:** Unloads heavy product logic (chicken toggles, stock management) from the Order Dashboard.
 
-### [ ] Step 3: Create `/admin/offers` Route
+### [x] Step 3: Create `/admin/offers` Route
 *   **Source:** `components/admin/OffersPanel.js` + `useAdminOffers` hook.
-*   **Destination:** `pages/admin/offers/index.js`.
+*   **Destination:** `pages/admin-offers.js` (Existing file optimized).
 *   **Action:** Move the "Offers" tab content to its own URL.
 
-### [ ] Step 4: Slim Down `admin-unified.js`
+### [x] Step 4: Slim Down `admin-unified.js`
 *   **Action:** Remove `ProductsTab`, `OffersPanel`, and their associated hooks.
 *   **Result:** `admin-unified.js` becomes purely the **Order Management Dashboard**.
 

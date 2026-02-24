@@ -118,6 +118,22 @@ export default function AdminProductsPage() {
         }
     }, [productBusy, updateProductStock, setProductBusy]);
 
+    // Chicken statistics
+    const chickenStats = React.useMemo(() => {
+        let total = 0, inStockCount = 0, unavailableCount = 0;
+        for (const category of Object.keys(menu || {})) {
+            for (const p of menu[category] || []) {
+                const isChicken = p?.isChicken === true || /chicken/i.test(p?.name || "");
+                if (isChicken) {
+                    total += 1;
+                    const isOn = p?.inStock === true;
+                    if (isOn) inStockCount += 1; else unavailableCount += 1;
+                }
+            }
+        }
+        return { total, inStockCount, unavailableCount };
+    }, [menu]);
+
     // Product edit handlers
     const handleEditPrice = useCallback((category, product) => {
         setProductMenuKey(null);

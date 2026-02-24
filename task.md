@@ -37,8 +37,8 @@ This phase focuses on understanding how the system behaves at runtime: ownership
    - [x] Create `electron/managers/ServerManager.js` (Next.js Spawn).
    - [x] Refactor `main.js` to import these services.
 
-### [ ] 3.2 Decouple `admin-unified.js` (Routes)
+### [x] 3.2 Decouple `admin-unified.js` (Routes)
    - **Goal:** Split the monolithic controller into 3 distinct pages.
-   - [ ] Create `/pages/admin/products.js`.
-   - [ ] Create `/pages/admin/offers.js`.
-   - [ ] Slim down `/pages/admin-unified.js` to only handle Orders.
+   - [x] Create `/pages/admin/products.js`.
+   - [x] Create `/pages/admin/offers.js`.
+   - [x] Slim down `/pages/admin-unified.js` to only handle Orders.

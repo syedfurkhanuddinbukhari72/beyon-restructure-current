@@ -1,0 +1,52 @@
+
+> beyon79@0.1.0 build
+> next build
+
+ ΓÜá Warning: Found multiple lockfiles. Selecting C:\Users\Syed Furkhan\Downloads\Beyon-desk\package-lock.json.
+   Consider removing the lockfiles at:
+   * C:\Users\Syed Furkhan\Downloads\Beyon-desk\beyon79\package-lock.json
+
+   Γû▓ Next.js 15.4.6
+   - Environments: .env.local
+
+   Skipping linting
+   Checking validity of types ...
+   Creating an optimized production build ...
+ Γ£ô Compiled successfully in 5.0s
+   Collecting page data ...
+   Generating static pages (0/25) ...
+[selectedBillData] Recalculating bill. Cart items: 0 dataVersion: 0
+[selectedBillData] Bill total: 0 lines: 0
+≡ƒöì getTotal called with: {
+  order: {
+    id: 'local-1770560535106-bmn6x',
+    status: 'preparing',
+    priority: 'normal',
+    type: 'DINE_IN',
+    tableNumber: 'T4',
+    createdAt: '2024-02-08T12:00:00.000Z',
+    items: [ [Object], [Object] ],
+    totalAmount: 300,
+    kitchenNotes: ''
+  },
+  orderType: 'object',
+  hasTotal: false,
+  hasAmount: false,
+  total: undefined,
+  amount: undefined,
+  hasItems: true,
+  itemsLength: 2
+}
+≡ƒöì getTotal returning: 300 (direct value)
+≡ƒöì useFilteredOrders - filtering 0 orders for tab: Active
+≡ƒ¢í∩╕Å After validation: 0 remaining
+ΓÜí Active tab filtering - checking orders...
+ΓÜí Active tab filtered 0 orders
+≡ƒöì useFilteredOrders - result: 0 orders
+ReferenceError: setShowAddRemoveMenu is not defined
+    at Q (C:\Users\Syed Furkhan\Downloads\Beyon-desk\beyon79\.next\server\pages\admin-unified.js:1:50967)
+Error occurred prerendering page "/admin-unified". Read more: https://nextjs.org/docs/messages/prerender-error
+ReferenceError: setShowAddRemoveMenu is not defined
+    at Q (C:\Users\Syed Furkhan\Downloads\Beyon-desk\beyon79\.next\server\pages\admin-unified.js:1:50967)
+Export encountered an error on /admin-unified, exiting the build.
+ Γ¿» Next.js build worker exited with code: 1 and signal: null

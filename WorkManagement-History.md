@@ -50,10 +50,15 @@
 **Status:** 🟡 IN PROGRESS
 
 ### → Work Package 3.1: Decoupling 'God Files'
-**Status:** 🟡 ACTIVE FOCUS
+**Status:** ✅ COMPLETE
 * [x] Create Refactoring Plan (`docs/Phase_3_Refactoring/PLAN.md`)
 * [x] Extract `PrinterService.js` (ESC/POS Logic)
 * [x] Verify & Fix Import Paths
 * [x] Extract `ShortcutManager.js`
 * [x] Extract `ServerManager.js` (Next.js Spawn)
-* [ ] Split `admin-unified.js` Tabs into Routes
+
+### → Work Package 3.2: Decoupling `admin-unified.js`
+**Status:** ✅ COMPLETE
+* [x] Create `/pages/admin/products.js` (Extract ProductsTab)
+* [x] Create `/pages/admin/offers.js` (Extract OffersPanel)
+* [x] Clean up `/pages/admin-unified.js` (Orders only)
