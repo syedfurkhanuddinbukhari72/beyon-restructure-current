@@ -67,34 +67,8 @@ function AdminUnifiedPageContent() {
     setConfirmState,
     shopStatus,
     setShopStatus,
-    individualOverrides,
-    setIndividualOverrides,
-    chLastClickRef,
     messageListenerRef,
     TABS,
-    createEmptyProductEditState,
-    productMenuKey,
-    setProductMenuKey,
-    productEditState,
-    setProductEditState,
-    offerOpen,
-    setOfferOpen,
-    showAddRemoveMenu,
-    setShowAddRemoveMenu,
-    showAddItem,
-    setShowAddItem,
-    bulkBusy,
-    setBulkBusy,
-    // Product state
-    productSearch,
-    setProductSearch,
-    showSearchBar,
-    setShowSearchBar,
-    showUnavailableOnly,
-    setShowUnavailableOnly,
-    // Product handlers
-    handleProductMenuToggle,
-    handleToggleOfferView,
   } = useAdminState();
 
   // Smart fetch function - uses optimized fetch for KOT tab
@@ -257,10 +231,6 @@ function AdminUnifiedPageContent() {
     router.push("/admin-login");
   }, [router]);
 
-  const handleShowAddRemoveMenu = useCallback(() => {
-    setShowAddRemoveMenu(true);
-  }, [setShowAddRemoveMenu]);
-
   // Close dropdowns on outside click
   React.useEffect(() => {
     const clickHandler = (e) => {
@@ -324,13 +294,7 @@ function AdminUnifiedPageContent() {
       onLogout={handleLogout}
       router={router}
     >
-      {tab === "Offers" ? (
-        <OffersPanel
-          bundleRules={hookBundleRules}
-          offersBusy={hookOffersBusy}
-          onCreateOffer={handleCreateOffer}
-        />
-      ) : tab === "KOT" ? (
+      {tab === "KOT" ? (
         <KOTTab
           kotOrders={filteredOrders}
           onLocalOrderUpdate={async (updatedOrder) => {
