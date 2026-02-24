@@ -8,13 +8,11 @@ import localOrdersData from "../data/local-orders-updated.json";
 import ConfirmModal from "../components/ConfirmModal";
 import AdminLayout from "../components/admin/layout/AdminLayout";
 import OrdersTab from "../components/admin/tabs/OrdersTab";
-import OffersPanel from "../components/admin/OffersPanel";
 import KOTTab from "../components/admin/tabs/KOTTab";
 
 import { useAdminState } from "../hooks/admin/useAdminState";
 import { useUnifiedOrderData } from "../hooks/useUnifiedOrderData";
 import { useFilteredOrders } from "../hooks/useFilteredOrders";
-import { useAdminOffers } from "@/src/hooks/admin/useAdminOffers";
 import { useAdminKeyboardShortcuts } from "../hooks/admin/useAdminKeyboardShortcuts";
 import { OrderDataProvider } from "../contexts/OrderDataContext";
 import { useAdminEffects } from "../hooks/admin/useAdminEffects";
@@ -196,18 +194,6 @@ function AdminUnifiedPageContent() {
     }
   }, [smartFetchOrders, showToast]);
 
-  // Offers management
-  const {
-    bundleRules: hookBundleRules,
-    offerForm: hookOfferForm,
-    offerType: hookOfferType,
-    offersBusy: hookOffersBusy,
-    fetchOffers,
-    saveOffer,
-    deleteOffer,
-    editOffer,
-  } = useAdminOffers();
-
   // Keyboard shortcuts
   useAdminKeyboardShortcuts(handleTabChange, showToast, expandedOrderId, filteredOrders, messageListenerRef);
 
@@ -239,7 +225,7 @@ function AdminUnifiedPageContent() {
     setLazyLoad,
     fetchOrders, // Use new fetchOrders
     () => { }, // previously hookFetchMenu
-    fetchOffers,
+    () => { }, // previously fetchOffers
     fetchShopStatus,
     () => { }, // previously hookFetchMenu
     messageListenerRef,
