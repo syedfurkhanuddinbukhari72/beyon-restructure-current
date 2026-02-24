@@ -7,25 +7,25 @@ Physically restructure the codebase to eliminate "God Files" (`main.js`, `admin-
 
 The `main.js` file currently handles Window Management, Printer Spooling, Shortcuts, and Server Spawning. We will extract 3 distinct services.
 
-### [ ] Step 1: Extract `PrinterService`
+### [x] Step 1: Extract `PrinterService`
 *   **Source:** `printReceiptJob`, `printWithEscPos`, `printWithTcpEscPos` logic in `main.js`.
 *   **Destination:** `electron/services/PrinterService.js`.
 *   **Action:** Move all ESC/POS library references and socket logic here. Expose a clean `printOrder(order)` API.
 *   **Verification:** Verify receipts still print via USB/Network.
 
-### [ ] Step 2: Extract `ShortcutManager`
+### [x] Step 2: Extract `ShortcutManager`
 *   **Source:** `globalShortcut.register` calls and `lastMPress` debouncing logic.
 *   **Destination:** `electron/managers/ShortcutManager.js`.
 *   **Action:** Encapsulate key registration and IPC sending (`mainWindow.webContents.send`).
 *   **Verification:** Test `Shift+A`, `Shift+P`, and `Shift+Enter` still work.
 
-### [ ] Step 3: Extract `ServerManager`
+### [x] Step 3: Extract `ServerManager`
 *   **Source:** The child process spawning logic (Lines 220-330).
 *   **Destination:** `electron/managers/ServerManager.js`.
 *   **Action:** Move the port scanning and `spawn('node', [server.js])` logic here.
 *   **Verification:** Ensure app still boots in Production mode.
 
-### [ ] Step 4: Clean `main.js`
+### [x] Step 4: Clean `main.js`
 *   **Action:** Import the above services. `main.js` should only handle Window Creation and Lifecycle events (`app.on('ready')`).
 
 ---
@@ -34,13 +34,13 @@ The `main.js` file currently handles Window Management, Printer Spooling, Shortc
 
 The `admin-unified.js` file acts as a massive controller for Orders, Products, and Offers. We will split it into distinct Next.js Routes.
 
-### [ ] Step 1: Route Audit & Shared Components
+### [x] Step 1: Route Audit & Shared Components
 *   **Task:** Ensure `AdminLayout` and `OrderDataProvider` can wrap individual pages without `admin-unified.js` control.
 *   **Task:** Ensure `useAdminState` logic can be split or migrated.
 
-### [ ] Step 2: Create `/admin/products` Route
+### [x] Step 2: Create `/admin/products` Route
 *   **Source:** `components/admin/tabs/ProductsTab.js` + `useAdminProducts` hook.
-*   **Destination:** `pages/admin/products/index.js`.
+*   **Destination:** `pages/admin/products/index.js` (Implemented as `pages/admin/products.js`).
 *   **Action:** Move the "Products" tab content to its own URL.
 *   **Benefit:** Unloads heavy product logic (chicken toggles, stock management) from the Order Dashboard.
 
