@@ -7,7 +7,6 @@ import localOrdersData from "../data/local-orders-updated.json";
 
 import ConfirmModal from "../components/ConfirmModal";
 import AdminLayout from "../components/admin/layout/AdminLayout";
-import ProductsTab from "../components/admin/tabs/ProductsTab";
 import OrdersTab from "../components/admin/tabs/OrdersTab";
 import OffersPanel from "../components/admin/OffersPanel";
 import KOTTab from "../components/admin/tabs/KOTTab";
@@ -15,7 +14,6 @@ import KOTTab from "../components/admin/tabs/KOTTab";
 import { useAdminState } from "../hooks/admin/useAdminState";
 import { useUnifiedOrderData } from "../hooks/useUnifiedOrderData";
 import { useFilteredOrders } from "../hooks/useFilteredOrders";
-import { useAdminProducts } from "../hooks/admin/useAdminProducts";
 import { useAdminOffers } from "@/src/hooks/admin/useAdminOffers";
 import { useAdminKeyboardShortcuts } from "../hooks/admin/useAdminKeyboardShortcuts";
 import { OrderDataProvider } from "../contexts/OrderDataContext";
@@ -137,16 +135,6 @@ function AdminUnifiedPageContent() {
   // ❌ REMOVED: KOT-specific fetching that created separate dataset
   // Rule: KOT does NOT fetch, KOT does NOT optimize fetch, KOT ONLY filters
 
-  // Products management
-  const {
-    menu,
-    productBusy,
-    setProductBusy,
-    fetchMenu: hookFetchMenu,
-    saveProductStock,
-    submitProductEdit: hookSubmitProductEdit,
-  } = useAdminProducts();
-
   // Orders management - NEW UNIFIED SYSTEM
   const {
     orders,
@@ -250,10 +238,10 @@ function AdminUnifiedPageContent() {
     lazyLoad,
     setLazyLoad,
     fetchOrders, // Use new fetchOrders
-    hookFetchMenu,
+    () => { }, // previously hookFetchMenu
     fetchOffers,
     fetchShopStatus,
-    hookFetchMenu,
+    () => { }, // previously hookFetchMenu
     messageListenerRef,
     () => { } // handleMessage will be handled by the keyboard shortcuts hook
   );
@@ -277,228 +265,6 @@ function AdminUnifiedPageContent() {
       setShopStatus((prev) => ({ isOpen: !isOpen }));
     }
   }, [setShopStatus, fetchShopStatus, showToast]);
-
-  // Product management handlers
-  const updateProductStock = useCallback(async (category, productName, inStock, manualOverride) => {
-    try {
-      const payload = { name: productName, inStock };
-      if (typeof manualOverride === 'boolean') {
-        payload.manualOverride = manualOverride;
-      }
-      await localData.upsertProduct(category, payload);
-      await hookFetchMenu();
-    } catch (error) {
-      console.error(error);
-      showToast(`Failed to update product stock: ${error.message}`);
-    }
-  }, [hookFetchMenu, showToast]);
-
-  const toggleProductStock = useCallback(async (category, product) => {
-    const key = JSON.stringify({ c: category, n: product.name });
-    if (productBusy[key]) return;
-    setProductBusy((prev) => ({ ...prev, [key]: true }));
-    try {
-      const next = !(product.inStock !== false);
-      const isChicken = product.isChicken === true || /chicken/i.test(product.name);
-      let manualOverride = true;
-      if (isChicken && ((next && product.inStock === true) || (!next && product.inStock === false))) {
-        manualOverride = false;
-      }
-      await updateProductStock(category, product.name, next, manualOverride);
-    } finally {
-      setProductBusy((prev) => ({ ...prev, [key]: false }));
-    }
-  }, [productBusy, updateProductStock]);
-
-  // Chicken statistics
-  const chickenStats = React.useMemo(() => {
-    let total = 0, inStockCount = 0, unavailableCount = 0;
-    for (const category of Object.keys(menu || {})) {
-      for (const p of menu[category] || []) {
-        const isChicken = p?.isChicken === true || /chicken/i.test(p?.name || "");
-        if (isChicken) {
-          total += 1;
-          const isOn = p?.inStock === true;
-          if (isOn) inStockCount += 1; else unavailableCount += 1;
-        }
-      }
-    }
-    return { total, inStockCount, unavailableCount };
-  }, [menu]);
-
-  // Product edit handlers
-  const handleEditPrice = useCallback((category, product) => {
-    setProductMenuKey(null);
-    setProductEditState({
-      open: true,
-      mode: 'price',
-      category,
-      product,
-      value: typeof product.price === 'number' ? String(product.price) : '',
-      busy: false,
-      error: ''
-    });
-  }, [setProductMenuKey, setProductEditState]);
-
-  const handleEditName = useCallback((category, product) => {
-    setProductMenuKey(null);
-    setProductEditState({
-      open: true,
-      mode: 'name',
-      category,
-      product,
-      value: product?.name ?? '',
-      busy: false,
-      error: ''
-    });
-  }, [setProductMenuKey, setProductEditState]);
-
-  const handleProductEditChange = useCallback((value) => {
-    setProductEditState((prev) => ({ ...prev, value, error: '' }));
-  }, [setProductEditState]);
-
-  const submitProductEdit = useCallback(async () => {
-    if (!productEditState.open || productEditState.busy) return;
-
-    const { mode, category, product, value } = productEditState;
-    if (!mode || !category || !product) {
-      setProductEditState(createEmptyProductEditState());
-      return;
-    }
-
-    const trimmed = value.trim();
-    if (!trimmed) {
-      setProductEditState((prev) => ({
-        ...prev,
-        error: mode === 'price' ? 'Price cannot be empty.' : 'Name cannot be empty.'
-      }));
-      return;
-    }
-
-    if (mode === 'name' && trimmed === product.name) {
-      setProductEditState(createEmptyProductEditState());
-      return;
-    }
-
-    if (mode === 'price') {
-      const priceValue = Number(trimmed);
-      if (Number.isNaN(priceValue) || priceValue < 0) {
-        setProductEditState((prev) => ({ ...prev, error: 'Enter a valid price.' }));
-        return;
-      }
-    }
-
-    const busyKey = JSON.stringify({ c: category, n: product.name });
-    if (productBusy[busyKey]) return;
-
-    setProductEditState((prev) => ({ ...prev, busy: true, error: '' }));
-
-    try {
-      await hookSubmitProductEdit(mode, category, product, trimmed);
-      showToast(mode === 'price' ? 'Price updated.' : 'Name updated.');
-      setProductEditState(createEmptyProductEditState());
-    } catch (error) {
-      console.error(mode === 'price' ? 'Edit price error' : 'Edit name error', error);
-      const failureMessage = error?.message
-        ? `Failed to update ${mode === 'price' ? 'price' : 'name'}: ${error.message}`
-        : `Failed to update ${mode === 'price' ? 'price' : 'name'}.`;
-      showToast(failureMessage);
-      setProductEditState((prev) => ({ ...prev, busy: false, error: failureMessage }));
-    }
-  }, [productEditState, productBusy, hookSubmitProductEdit, showToast]);
-
-  const closeProductEditModal = useCallback(() => {
-    setProductEditState(createEmptyProductEditState());
-  }, [setProductEditState]);
-
-  // Offer handlers
-  const handleEditOffer = useCallback((category, product) => {
-    setProductMenuKey(null);
-    const { ok, prefill } = editOffer(category, product);
-    if (!ok) {
-      showToast('Could not edit offer: Invalid product selection');
-      return;
-    }
-    router.push('/admin-offers');
-  }, [setProductMenuKey, editOffer, showToast, router]);
-
-  const handleRemoveOffer = useCallback(async (category, product) => {
-    setProductMenuKey(null);
-    try {
-      await deleteOffer({ category, product });
-      showToast('Offer removed successfully');
-      await fetchOffers();
-    } catch (error) {
-      console.error('Failed to remove offer:', error);
-      showToast('Failed to remove offer. Please try again.');
-    }
-  }, [setProductMenuKey, deleteOffer, fetchOffers, showToast]);
-
-  const handleDeleteProduct = useCallback((category, product) => {
-    setProductMenuKey(null);
-    setConfirmState({
-      open: true,
-      title: 'Delete item',
-      message: `Delete '${product.name}' from '${category}'? This WILL remove the item permanently.`,
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
-      busy: false,
-      onConfirm: async () => {
-        // Implementation would go here
-        setConfirmState({ open: false });
-      },
-    });
-  }, [setProductMenuKey, setConfirmState]);
-
-  // Bulk chicken operations
-  const bulkSetChicken = useCallback(async (inStockTarget) => {
-    if (bulkBusy) return;
-    if (chickenStats.total === 0) {
-      showChToast("No Chicken products found.");
-      return;
-    }
-    const verb = inStockTarget ? 'ON' : 'OFF';
-    const proceed = typeof window !== 'undefined' ? window.confirm(`Turn all 'Chicken' items ${verb}?`) : true;
-    if (!proceed) return;
-
-    setBulkBusy(true);
-    try {
-      const result = await localData.bulkToggleChickenItems(inStockTarget);
-      showChToast(`${result.changed} chicken items turned ${verb}.`);
-      await hookFetchMenu();
-    } catch (e) {
-      console.error(e);
-      showChToast("Failed to bulk update chicken items.", 'error');
-    } finally {
-      setBulkBusy(false);
-    }
-  }, [bulkBusy, chickenStats.total, showChToast, hookFetchMenu]);
-
-  const bulkOffChickenWithOverrides = useCallback(async ({ noConfirm = false, silent = false } = {}) => {
-    const ok = noConfirm || (typeof window !== 'undefined' ? window.confirm("Turn OFF all chicken items except manually overridden ones?") : true);
-    if (!ok) return;
-    try {
-      setBulkBusy(true);
-      const excludeItems = Object.keys(individualOverrides).filter(
-        (itemName) => individualOverrides[itemName]?.inStock === true
-      );
-      const info = await localData.bulkToggleChickenItems(false, excludeItems);
-      if (!silent) {
-        showChToast(`Turned OFF ${info.changed || '-'} chicken items (manual overrides preserved).`);
-      }
-      await hookFetchMenu();
-    } catch (error) {
-      console.error('bulkOffChickenWithOverrides', error);
-      if (!silent) showChToast('Failed to turn OFF chicken items.', 'error');
-    } finally {
-      setBulkBusy(false);
-    }
-  }, [individualOverrides, showChToast, hookFetchMenu]);
-
-  // Other handlers
-  const handleCreateOffer = useCallback(() => {
-    router.push("/admin-offers");
-  }, [router]);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem("adminAuthenticated");
@@ -572,38 +338,7 @@ function AdminUnifiedPageContent() {
       onLogout={handleLogout}
       router={router}
     >
-      {tab === "Products" ? (
-        <ProductsTab
-          menu={menu}
-          productBusy={productBusy}
-          productSearch={productSearch}
-          showSearchBar={showSearchBar}
-          showUnavailableOnly={showUnavailableOnly}
-          bulkBusy={bulkBusy}
-          chickenStats={chickenStats}
-          productMenuKey={productMenuKey}
-          offerOpen={offerOpen}
-          onProductSearchChange={setProductSearch}
-          onToggleSearchBar={() => setShowSearchBar(!showSearchBar)}
-          onToggleUnavailableOnly={() => setShowUnavailableOnly(!showUnavailableOnly)}
-          onShowAddRemoveMenu={handleShowAddRemoveMenu}
-          onCreateOffer={handleCreateOffer}
-          onBulkChickenToggle={bulkSetChicken}
-          onProductMenuToggle={handleProductMenuToggle}
-          onEditPrice={handleEditPrice}
-          onEditName={handleEditName}
-          onEditOffer={handleEditOffer}
-          onRemoveOffer={handleRemoveOffer}
-          onDeleteProduct={handleDeleteProduct}
-          onToggleProductStock={toggleProductStock}
-          onToggleOfferView={handleToggleOfferView}
-          productEditState={productEditState}
-          onProductEditChange={handleProductEditChange}
-          onSubmitProductEdit={submitProductEdit}
-          onCloseProductEditModal={closeProductEditModal}
-          hookBundleRules={hookBundleRules}
-        />
-      ) : tab === "Offers" ? (
+      {tab === "Offers" ? (
         <OffersPanel
           bundleRules={hookBundleRules}
           offersBusy={hookOffersBusy}
