@@ -59,3 +59,17 @@ The `admin-unified.js` file acts as a massive controller for Orders, Products, a
 1.  **Backup:** Run `git commit` before each Step.
 2.  **Validation:** Test "Critical Path" (Order Creation -> Printing) after every extraction.
 3.  **Rollback:** If `main.js` breaks, revert immediately. It is the bootloader.
+
+---
+
+## 🏗️ Phase 4: Database & Service Layer Consolidation
+
+The `localDataService.js` file handles all file-based database operations (Orders, Menu, Offers, Config). We will extract these into localized domain services.
+
+### Work Package 4.1: Refactor `localDataService.js`
+*   **Goal:** Break apart the monolithic generic data service.
+*   **Step 1:** Audit `localDataService.js` to identify exactly which functions belong to which domain.
+*   **Step 2:** Scaffold `src/services/` directory.
+*   **Step 3:** Extract logic into `OrderService.js`, `ProductService.js`, `OfferService.js`, and `ConfigService.js`.
+*   **Step 4:** Safely update imports across the codebase to point to the new domain services.
+*   **Step 5:** Delete the deprecated `localDataService.js`.

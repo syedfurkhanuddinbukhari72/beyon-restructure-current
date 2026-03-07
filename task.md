@@ -42,3 +42,14 @@ This phase focuses on understanding how the system behaves at runtime: ownership
    - [x] Create `/pages/admin/products.js`.
    - [x] Create `/pages/admin/offers.js`.
    - [x] Slim down `/pages/admin-unified.js` to only handle Orders.
+
+## Phase 4 — Database & Service Layer Consolidation
+
+### [ ] 4.1 Refactor `localDataService.js`
+   - **Goal:** Break apart the monolithic data service into domain-specific services.
+   - [ ] Audit `localDataService.js` to identify domain clusters (Orders, Menu, Offers, Config).
+   - [ ] Create `src/services/OrderService.js`.
+   - [ ] Create `src/services/ProductService.js`.
+   - [ ] Create `src/services/OfferService.js`.
+   - [ ] Create `src/services/ConfigService.js`.
+   - [ ] Deprecate and remove `localDataService.js`.

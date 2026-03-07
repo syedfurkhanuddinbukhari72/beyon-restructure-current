@@ -62,3 +62,15 @@
 * [x] Create `/pages/admin/products.js` (Extract ProductsTab)
 * [x] Create `/pages/admin/offers.js` (Extract OffersPanel)
 * [x] Clean up `/pages/admin-unified.js` (Orders only)
+
+---
+
+## 🚀 Phase 4: Database & Service Layer Consolidation
+**Status:** ⚪ PLANNED
+
+### → Work Package 4.1: Refactor `localDataService.js`
+**Status:** ⚪ PLANNED
+* [ ] Audit `localDataService.js` domain clusters
+* [ ] Scaffold `src/services/`
+* [ ] Extract `OrderService.js`, `ProductService.js`, `OfferService.js`, `ConfigService.js`
+* [ ] Update references and delete `localDataService.js`

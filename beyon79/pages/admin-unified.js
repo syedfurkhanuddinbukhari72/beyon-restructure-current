@@ -249,33 +249,7 @@ function AdminUnifiedPageContent() {
     };
   }, [menuOpen, menuDropdownRef, menuButtonRef]);
 
-  // Close product menu on outside click
-  React.useEffect(() => {
-    if (!productMenuKey) return;
-    const clickHandler = (event) => {
-      const menuEl = document.querySelector(`[data-product-menu="${productMenuKey}"]`);
-      const buttonEl = document.querySelector(`[data-product-button="${productMenuKey}"]`);
-      if (!menuEl && !buttonEl) {
-        setProductMenuKey(null);
-        return;
-      }
-      if (menuEl?.contains(event.target) || buttonEl?.contains(event.target)) {
-        return;
-      }
-      setProductMenuKey(null);
-    };
-    const keyHandler = (event) => {
-      if (event.key === "Escape") {
-        setProductMenuKey(null);
-      }
-    };
-    document.addEventListener("mousedown", clickHandler);
-    document.addEventListener("keydown", keyHandler);
-    return () => {
-      document.removeEventListener("mousedown", clickHandler);
-      document.removeEventListener("keydown", keyHandler);
-    };
-  }, [productMenuKey]);
+
 
   return (
     <AdminLayout
